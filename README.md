@@ -30,11 +30,12 @@ You need the following:
     ```
 
 2.  **Install dependencies:**
-    It is recommended to use a virtual environment.
+    It is recommended to use [uv](https://github.com/astral-sh/uv) for extremely fast environment management.
     ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
-    pip install -r requirements.txt
+    # Create a virtual environment and install dependencies
+    uv venv
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+    uv pip install -r requirements.txt
     ```
 
 3.  **Configure Environment Variables:**
@@ -50,7 +51,7 @@ You need the following:
 
 4.  **Run the Bot:**
     ```bash
-    python main.py
+    uv run main.py
     ```
     Send a message with a link to Channel A. The bot should log the activity in your terminal and post a summary to Channel B.
 
