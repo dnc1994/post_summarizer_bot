@@ -69,16 +69,21 @@ async def summarize_content(text):
     """Summarizes the text using Gemini API."""
     try:
         logger.info(f"Sending content to Gemini ({MODEL_NAME})...")
-        # Explicitly asking for Markdown formatting
+        # Asking for HTML formatting for a "richer" Telegram look
         prompt = f"""
-        Please provide a concise and engaging summary of the following article. 
-        Use the following Markdown structure:
-        1. Start with a bold title (don't repeat the URL).
-        2. Use a short paragraph for a high-level overview.
-        3. Use a bulleted list for key takeaways and main points.
-        4. Use bolding for emphasis on important terms.
+        Please provide a professional, visually appealing summary of the following article.
+        Format the output using HTML tags supported by Telegram.
         
-        Keep the tone professional yet accessible. Output ONLY the summary in Markdown.
+        Follow this structure:
+        1. <b>Title:</b> Use a bold, catchy title for the article.
+        2. <blockquote>A brief 1-2 sentence high-level overview in a blockquote.</blockquote>
+        3. <b>Key Takeaways:</b>
+           • Use bullet points for the main points.
+           • Use <b>bold</b> for key concepts and <i>italics</i> for emphasis.
+        4. (Optional) A "Deep Dive" section if there are particularly interesting details.
+
+        Output ONLY the summary using <b>, <i>, <u>, <s>, <a>, <code>, <pre>, and <blockquote> tags.
+        Do not use <h1> or other unsupported HTML tags. Keep it clean and elegant.
 
         Article Content:
         {text[:30000]} 
@@ -132,8 +137,8 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning(f"Could not extract content from {url}")
             await context.bot.send_message(
                 chat_id=CHANNEL_B_ID, 
-                text=f"❌ **Error:** Could not extract article content from {url}",
-                parse_mode='Markdown'
+                text=f"❌ <b>Error:</b> Could not extract article content from {url}",
+                parse_mode='HTML'
             )
             return
 
@@ -141,10 +146,10 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if summary:
             # We use a separator and link at the bottom for a cleaner look
-            message = f"{summary}\n\n---\n🔗 [Read Original Article]({url})"
+            message = f"{summary}\n\n---\n🔗 <a href=\"{url}\">Read Original Article</a>"
             try:
                 logger.info(f"Sending summary to Channel B ({CHANNEL_B_ID})...")
-                await context.bot.send_message(chat_id=CHANNEL_B_ID, text=message, parse_mode='Markdown')
+                await context.bot.send_message(chat_id=CHANNEL_B_ID, text=message, parse_mode='HTML')
                 logger.info("Summary successfully sent to Channel B.")
             except Exception as e:
                 logger.error(f"Failed to send message to Channel B: {e}")
@@ -152,15 +157,15 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("Failed to generate summary.")
             await context.bot.send_message(
                 chat_id=CHANNEL_B_ID, 
-                text=f"❌ **Error:** Gemini failed to generate a summary for {url}",
-                parse_mode='Markdown'
+                text=f"❌ <b>Error:</b> Gemini failed to generate a summary for {url}",
+                parse_mode='HTML'
             )
     except Exception as e:
         logger.error(f"Unexpected error processing {url}: {e}")
         await context.bot.send_message(
             chat_id=CHANNEL_B_ID, 
-            text=f"❌ **Unexpected Error:** {str(e)}\nURL: {url}",
-            parse_mode='Markdown'
+            text=f"❌ <b>Unexpected Error:</b> {str(e)}\nURL: {url}",
+            parse_mode='HTML'
         )
 
 async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
