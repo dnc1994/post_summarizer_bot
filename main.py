@@ -46,16 +46,21 @@ def scrape_content(url):
     """Scrapes the content of the URL using trafilatura."""
     logger.info(f"Attempting to scrape URL: {url}")
     try:
+        # Some sites block default scrapers; trafilatura's fetch_url is basic
         downloaded = trafilatura.fetch_url(url)
+        
         if downloaded:
-            text = trafilatura.extract(downloaded)
+            # favor_recall=True makes extraction less strict, helpful for non-standard blogs
+            text = trafilatura.extract(downloaded, favor_recall=True, include_comments=False)
+            
             if text:
                 logger.info(f"Successfully scraped {len(text)} characters from {url}")
                 return text
             else:
-                logger.warning(f"Trafilatura returned empty text for {url}")
+                logger.warning(f"Trafilatura failed to find article content in the HTML from {url}")
+                # You could log the first 500 chars of 'downloaded' here if you really need to see the HTML
         else:
-            logger.warning(f"Could not download content from {url}")
+            logger.warning(f"Could not download content from {url} (HTTP error or blocking)")
     except Exception as e:
         logger.error(f"Error scraping {url}: {e}")
     return None
@@ -115,23 +120,41 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"Found URL: {url}")
     
-    article_text = scrape_content(url)
-    if not article_text:
-        logger.warning(f"Could not extract content from {url}")
-        return
+    try:
+        article_text = scrape_content(url)
+        if not article_text:
+            logger.warning(f"Could not extract content from {url}")
+            await context.bot.send_message(
+                chat_id=CHANNEL_B_ID, 
+                text=f"❌ **Error:** Could not extract article content from {url}",
+                parse_mode='Markdown'
+            )
+            return
 
-    summary = await summarize_content(article_text)
-    
-    if summary:
-        message = f"**Summary of:** {url}\n\n{summary}"
-        try:
-            logger.info(f"Sending summary to Channel B ({CHANNEL_B_ID})...")
-            await context.bot.send_message(chat_id=CHANNEL_B_ID, text=message, parse_mode='Markdown')
-            logger.info("Summary successfully sent to Channel B.")
-        except Exception as e:
-            logger.error(f"Failed to send message to Channel B: {e}")
-    else:
-        logger.error("Failed to generate summary.")
+        summary = await summarize_content(article_text)
+        
+        if summary:
+            message = f"**Summary of:** {url}\n\n{summary}"
+            try:
+                logger.info(f"Sending summary to Channel B ({CHANNEL_B_ID})...")
+                await context.bot.send_message(chat_id=CHANNEL_B_ID, text=message, parse_mode='Markdown')
+                logger.info("Summary successfully sent to Channel B.")
+            except Exception as e:
+                logger.error(f"Failed to send message to Channel B: {e}")
+        else:
+            logger.error("Failed to generate summary.")
+            await context.bot.send_message(
+                chat_id=CHANNEL_B_ID, 
+                text=f"❌ **Error:** Gemini failed to generate a summary for {url}",
+                parse_mode='Markdown'
+            )
+    except Exception as e:
+        logger.error(f"Unexpected error processing {url}: {e}")
+        await context.bot.send_message(
+            chat_id=CHANNEL_B_ID, 
+            text=f"❌ **Unexpected Error:** {str(e)}\nURL: {url}",
+            parse_mode='Markdown'
+        )
 
 async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Catch-all logger to see what's coming in."""
