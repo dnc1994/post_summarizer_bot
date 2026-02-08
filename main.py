@@ -33,6 +33,8 @@ if not all([TELEGRAM_BOT_TOKEN, CHANNEL_A_ID, CHANNEL_B_ID, GEMINI_API_KEY]):
 
 # Initialize Gemini
 client = genai.Client(api_key=GEMINI_API_KEY)
+# Using gemini-2.0-flash (latest available flash model)
+MODEL_NAME = 'gemini-2.0-flash'
 
 def extract_url(text):
     """Extracts the first URL from the text."""
@@ -42,11 +44,18 @@ def extract_url(text):
 
 def scrape_content(url):
     """Scrapes the content of the URL using trafilatura."""
+    logger.info(f"Attempting to scrape URL: {url}")
     try:
         downloaded = trafilatura.fetch_url(url)
         if downloaded:
             text = trafilatura.extract(downloaded)
-            return text
+            if text:
+                logger.info(f"Successfully scraped {len(text)} characters from {url}")
+                return text
+            else:
+                logger.warning(f"Trafilatura returned empty text for {url}")
+        else:
+            logger.warning(f"Could not download content from {url}")
     except Exception as e:
         logger.error(f"Error scraping {url}: {e}")
     return None
@@ -54,6 +63,7 @@ def scrape_content(url):
 async def summarize_content(text):
     """Summarizes the text using Gemini API."""
     try:
+        logger.info(f"Sending content to Gemini ({MODEL_NAME})...")
         # You can tweak this prompt later
         prompt = f"""
         Please provide a concise and engaging summary of the following article/blog post. 
@@ -62,13 +72,14 @@ async def summarize_content(text):
         Article Content:
         {text[:30000]} 
         """ 
-        # Truncating to avoid token limits for very large texts, though Gemini has a large context window.
         
         response = await client.aio.models.generate_content(
-            model='gemini-1.5-flash',
+            model=MODEL_NAME,
             contents=prompt,
         )
-        return response.text
+        summary = response.text
+        logger.info("Summary generated successfully.")
+        return summary
     except Exception as e:
         logger.error(f"Error summarizing content: {e}")
         return None
@@ -76,16 +87,26 @@ async def summarize_content(text):
 async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler to process messages from Channel A."""
     
-    # Ensure the message is from the correct channel
-    # Note: Telegram channel IDs usually start with -100
-    if str(update.effective_chat.id) != str(CHANNEL_A_ID):
+    # Debug logging for every message received
+    chat_id = update.effective_chat.id if update.effective_chat else "Unknown"
+    logger.info(f"Received update from chat_id: {chat_id}")
+
+    if update.channel_post:
+        logger.info(f"Update is a channel_post from: {update.channel_post.chat.title} ({update.channel_post.chat.id})")
+    elif update.message:
+        logger.info(f"Update is a private/group message from: {update.message.chat.id}")
+
+    # Check if the message is from the target channel
+    if str(chat_id) != str(CHANNEL_A_ID):
+        logger.info(f"Ignoring message: Chat ID {chat_id} does not match CHANNEL_A_ID {CHANNEL_A_ID}")
         return
 
-    message_text = update.channel_post.text if update.channel_post else None
+    message_text = update.channel_post.text or update.channel_post.caption if update.channel_post else None
     if not message_text:
+        logger.info("Message has no text or caption. Skipping.")
         return
 
-    logger.info(f"Processing message from Channel A: {message_text[:50]}...")
+    logger.info(f"Processing message from Channel A: {message_text[:100]}...")
 
     url = extract_url(message_text)
     if not url:
@@ -94,48 +115,48 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"Found URL: {url}")
     
-    # Notify Channel B (or logs) that processing started? Optional. 
-    # For now, let's just do the work silently.
-
     article_text = scrape_content(url)
     if not article_text:
         logger.warning(f"Could not extract content from {url}")
-        # Optionally send a failure message to an admin or log it
         return
 
-    logger.info("Content extracted. Summarizing...")
     summary = await summarize_content(article_text)
     
     if summary:
         message = f"**Summary of:** {url}\n\n{summary}"
         try:
+            logger.info(f"Sending summary to Channel B ({CHANNEL_B_ID})...")
             await context.bot.send_message(chat_id=CHANNEL_B_ID, text=message, parse_mode='Markdown')
-            logger.info("Summary sent to Channel B.")
+            logger.info("Summary successfully sent to Channel B.")
         except Exception as e:
             logger.error(f"Failed to send message to Channel B: {e}")
     else:
         logger.error("Failed to generate summary.")
 
+async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Catch-all logger to see what's coming in."""
+    logger.info(f"RAW UPDATE: {update.to_dict()}")
+
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # Filter for channel posts that contain text
-    # We allow text messages (filters.TEXT) and ensure it's a channel post (Update.channel_post is handled by the handler usually, but filters help)
-    handler = MessageHandler(filters.Chat(chat_id=int(CHANNEL_A_ID)) & (filters.TEXT | filters.CAPTION), process_message)
-    
-    # Note: python-telegram-bot treats channel posts slightly differently. 
-    # We should attach the handler. 
-    # However, 'filters.Chat' might not work if the bot hasn't seen the chat yet or specific integer handling.
-    # A safer generic handler checks the ID inside the function or uses a broader filter.
-    # Let's use a broader filter but check ID inside, but optimize with filters.Chat if possible.
-    # Since CHANNEL_A_ID is env var, we cast to int.
-    
+    # Log when we receive ANY update to help debug
+    # application.add_handler(MessageHandler(filters.ALL, log_all_updates), group=-1)
+
     try:
         channel_a_int = int(CHANNEL_A_ID)
         # Using a raw MessageHandler that catches channel posts
-        application.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POST & filters.Chat(chat_id=channel_a_int), process_message))
+        # Note: filters.UpdateType.CHANNEL_POST is crucial for channel bots
+        channel_handler = MessageHandler(filters.UpdateType.CHANNEL_POST, process_message)
+        application.add_handler(channel_handler)
         
-        logger.info(f"Bot started. Listening to Channel A ({CHANNEL_A_ID})...")
+        logger.info("--- Bot Configuration ---")
+        logger.info(f"Target Channel A: {CHANNEL_A_ID}")
+        logger.info(f"Target Channel B: {CHANNEL_B_ID}")
+        logger.info(f"Gemini Model: {MODEL_NAME}")
+        logger.info("-------------------------")
+        logger.info("Bot started. Polling for updates...")
+        
         application.run_polling()
     except ValueError:
         logger.error("CHANNEL_A_ID must be an integer (e.g., -100123456789)")
