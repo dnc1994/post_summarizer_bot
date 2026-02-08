@@ -69,11 +69,17 @@ async def summarize_content(text):
     """Summarizes the text using Gemini API."""
     try:
         logger.info(f"Sending content to Gemini ({MODEL_NAME})...")
-        # You can tweak this prompt later
+        # Explicitly asking for Markdown formatting
         prompt = f"""
-        Please provide a concise and engaging summary of the following article/blog post. 
-        Focus on the main takeaways and key points.
+        Please provide a concise and engaging summary of the following article. 
+        Use the following Markdown structure:
+        1. Start with a bold title (don't repeat the URL).
+        2. Use a short paragraph for a high-level overview.
+        3. Use a bulleted list for key takeaways and main points.
+        4. Use bolding for emphasis on important terms.
         
+        Keep the tone professional yet accessible. Output ONLY the summary in Markdown.
+
         Article Content:
         {text[:30000]} 
         """ 
@@ -134,7 +140,8 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         summary = await summarize_content(article_text)
         
         if summary:
-            message = f"**Summary of:** {url}\n\n{summary}"
+            # We use a separator and link at the bottom for a cleaner look
+            message = f"{summary}\n\n---\n🔗 [Read Original Article]({url})"
             try:
                 logger.info(f"Sending summary to Channel B ({CHANNEL_B_ID})...")
                 await context.bot.send_message(chat_id=CHANNEL_B_ID, text=message, parse_mode='Markdown')
