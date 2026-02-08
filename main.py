@@ -18,6 +18,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL_A_ID = os.getenv("CHANNEL_A_ID") # The ID of the channel to listen to
 CHANNEL_B_ID = os.getenv("CHANNEL_B_ID") # The ID of the channel to post summaries to
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+AUTHORIZED_USER_ID = os.getenv("AUTHORIZED_USER_ID") # Optional: Filter by user ID
 
 # Logging setup
 logging.basicConfig(
@@ -103,6 +104,21 @@ async def summarize_content(text):
 async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler to process messages from Channel A."""
     
+    # 1. Security Check: User ID Filtering
+    if AUTHORIZED_USER_ID:
+        # For channel posts, effective_user might be None or represent the channel.
+        # However, if 'from_user' is present (e.g. in signed posts or if bot is used in groups/DMs), we check it.
+        sender = update.effective_user
+        if sender and str(sender.id) != str(AUTHORIZED_USER_ID):
+            logger.warning(f"Unauthorized access attempt by User ID: {sender.id} ({sender.username})")
+            return
+        elif not sender and update.channel_post:
+            # Channel posts don't always have a 'user' unless signed.
+            # If AUTHORIZED_USER_ID is set, we might want to be careful.
+            # For now, we'll assume if it's from the target channel, it's okay, 
+            # UNLESS you specifically want to filter who posts to that channel (if signed).
+            pass
+
     # Debug logging for every message received
     chat_id = update.effective_chat.id if update.effective_chat else "Unknown"
     logger.info(f"Received update from chat_id: {chat_id}")

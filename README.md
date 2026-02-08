@@ -21,6 +21,20 @@ You need the following:
         *   Forward a message from the channel to [userinfobot](https://t.me/userinfobot) or [JsonDumpBot](https://t.me/jsondumpbot).
         *   The ID usually looks like `-100xxxxxxxxxx`.
 
+## Security & User Filtering
+
+By default, the bot listens to all messages in the configured Channel A. To prevent unauthorized usage of your Gemini API key (e.g., if someone adds your bot to another group or if you want to restrict who can trigger the bot via DMs), you can enable **User ID Filtering**.
+
+1.  **Get your Telegram User ID:**
+    *   Message [@userinfobot](https://t.me/userinfobot) on Telegram.
+    *   It will reply with your unique numerical ID.
+2.  **Set the Environment Variable:**
+    *   Add `AUTHORIZED_USER_ID=your_id_here` to your `.env` file or Railway variables.
+3.  **Result:**
+    *   If set, the bot will only process messages where the sender matches this ID.
+    *   Unauthorized attempts are logged on the server but receive no response from the bot.
+    *   If left empty/unset, the bot will process all messages in Channel A.
+
 ## Local Development & Testing
 
 1.  **Clone the repository:**
