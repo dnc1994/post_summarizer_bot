@@ -1,4 +1,4 @@
 python-telegram-bot
 trafilatura
-google-generativeai
+google-genai
 python-dotenv

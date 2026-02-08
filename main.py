@@ -5,7 +5,7 @@ import re
 from urllib.parse import urlparse
 
 import trafilatura
-import google.generativeai as genai
+from google import genai
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 from dotenv import load_dotenv
@@ -32,8 +32,7 @@ if not all([TELEGRAM_BOT_TOKEN, CHANNEL_A_ID, CHANNEL_B_ID, GEMINI_API_KEY]):
     exit(1)
 
 # Initialize Gemini
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 def extract_url(text):
     """Extracts the first URL from the text."""
@@ -65,7 +64,10 @@ async def summarize_content(text):
         """ 
         # Truncating to avoid token limits for very large texts, though Gemini has a large context window.
         
-        response = await model.generate_content_async(prompt)
+        response = await client.aio.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=prompt,
+        )
         return response.text
     except Exception as e:
         logger.error(f"Error summarizing content: {e}")
@@ -105,9 +107,7 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     summary = await summarize_content(article_text)
     
     if summary:
-        message = f"**Summary of:** {url}
-
-{summary}"
+        message = f"**Summary of:** {url}\n\n{summary}"
         try:
             await context.bot.send_message(chat_id=CHANNEL_B_ID, text=message, parse_mode='Markdown')
             logger.info("Summary sent to Channel B.")
