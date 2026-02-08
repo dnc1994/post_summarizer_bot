@@ -33,8 +33,8 @@ if not all([TELEGRAM_BOT_TOKEN, CHANNEL_A_ID, CHANNEL_B_ID, GEMINI_API_KEY]):
 
 # Initialize Gemini
 client = genai.Client(api_key=GEMINI_API_KEY)
-# Using gemini-2.0-flash (latest available flash model)
-MODEL_NAME = 'gemini-2.0-flash'
+# Using gemini-3-flash-preview
+MODEL_NAME = 'gemini-3-flash-preview'
 
 def extract_url(text):
     """Extracts the first URL from the text."""
