@@ -1,0 +1,4 @@
+python-telegram-bot
+trafilatura
+google-generativeai
+python-dotenv
