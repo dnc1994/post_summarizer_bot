@@ -57,13 +57,33 @@ To keep your bot safe and prevent unwanted API costs:
     uv run main.py
     ```
 
-5.  **🧪 Debug Scraping:**
+5. **🧪 Debug Scraping:**
+
     Test specific URLs with the debugger:
+
     ```bash
+
     uv run python debug_scrape.py "https://example.com/article"
+
     ```
 
+
+
+6. **🎯 Test Prompt Tuning:**
+
+    Test how your changes in `prompts.py` affect the output:
+
+    ```bash
+
+    uv run python test_prompt.py "https://example.com/article"
+
+    ```
+
+
+
 ## 🚀 Deployment
+
+
 
 The bot is designed as a **long-running process**. It needs to stay active 24/7 to listen for updates from Telegram.
 
@@ -119,7 +139,7 @@ WantedBy=multi-user.target
 
 ## 🛠️ Customization
 
--   **✍️ Prompt Tuning:** Edit `summarize_content` in `main.py` to change the summary's vibe.
+-   **✍️ Prompt Tuning:** Edit the `SUMMARIZATION_PROMPT_TEMPLATE` in `prompts.py` to change the summary's vibe, structure, or emoji usage. Use `test_prompt.py` to see your changes in action immediately.
 -   **🤖 Model Choice:** We use `gemini-3-flash-preview`. See `GEMINI.md` for details.
 
 ## 🗺️ Future Work

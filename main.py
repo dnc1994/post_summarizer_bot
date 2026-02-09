@@ -10,6 +10,8 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 from dotenv import load_dotenv
 
+from prompts import SUMMARIZATION_PROMPT_TEMPLATE
+
 # Load environment variables
 load_dotenv()
 
@@ -75,26 +77,8 @@ async def summarize_content(text):
     """Summarizes the text using Gemini API."""
     try:
         logger.info(f"Sending content to Gemini ({MODEL_NAME})...")
-        # Asking for HTML formatting with emojis
-        prompt = f"""
-        Please provide a professional, visually appealing summary of the following article.
-        Format the output using HTML tags supported by Telegram and include relevant emojis to make it engaging.
-        
-        Follow this structure:
-        1. <b>📖 Title:</b> Use a bold, catchy title for the article.
-        2. <blockquote>💡 A brief 1-2 sentence high-level overview in a blockquote.</blockquote>
-        3. <b>📌 Key Takeaways:</b>
-           • Use bullet points for the main points.
-           • Include relevant emojis at the start of each bullet point.
-           • Use <b>bold</b> for key concepts and <i>italics</i> for emphasis.
-        4. ✨ (Optional) A "Deep Dive" section if there are particularly interesting details.
-
-        Output ONLY the summary using <b>, <i>, <u>, <s>, <a>, <code>, <pre>, and <blockquote> tags.
-        Do not use <h1> or other unsupported HTML tags. Keep it clean, elegant, and friendly.
-
-        Article Content:
-        {text[:30000]} 
-        """ 
+        # Use the template from prompts.py
+        prompt = SUMMARIZATION_PROMPT_TEMPLATE.format(text=text[:30000])
         
         response = await client.aio.models.generate_content(
             model=MODEL_NAME,
