@@ -27,6 +27,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Silence noisy library logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 # Validate config
 if not all([TELEGRAM_BOT_TOKEN, CHANNEL_A_ID, CHANNEL_B_ID, GEMINI_API_KEY]):
     logger.error("Missing one or more required environment variables: TELEGRAM_BOT_TOKEN, CHANNEL_A_ID, CHANNEL_B_ID, GEMINI_API_KEY")
