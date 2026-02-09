@@ -70,21 +70,22 @@ async def summarize_content(text):
     """Summarizes the text using Gemini API."""
     try:
         logger.info(f"Sending content to Gemini ({MODEL_NAME})...")
-        # Asking for HTML formatting for a "richer" Telegram look
+        # Asking for HTML formatting with emojis
         prompt = f"""
         Please provide a professional, visually appealing summary of the following article.
-        Format the output using HTML tags supported by Telegram.
+        Format the output using HTML tags supported by Telegram and include relevant emojis to make it engaging.
         
         Follow this structure:
-        1. <b>Title:</b> Use a bold, catchy title for the article.
-        2. <blockquote>A brief 1-2 sentence high-level overview in a blockquote.</blockquote>
-        3. <b>Key Takeaways:</b>
+        1. <b>📖 Title:</b> Use a bold, catchy title for the article.
+        2. <blockquote>💡 A brief 1-2 sentence high-level overview in a blockquote.</blockquote>
+        3. <b>📌 Key Takeaways:</b>
            • Use bullet points for the main points.
+           • Include relevant emojis at the start of each bullet point.
            • Use <b>bold</b> for key concepts and <i>italics</i> for emphasis.
-        4. (Optional) A "Deep Dive" section if there are particularly interesting details.
+        4. ✨ (Optional) A "Deep Dive" section if there are particularly interesting details.
 
         Output ONLY the summary using <b>, <i>, <u>, <s>, <a>, <code>, <pre>, and <blockquote> tags.
-        Do not use <h1> or other unsupported HTML tags. Keep it clean and elegant.
+        Do not use <h1> or other unsupported HTML tags. Keep it clean, elegant, and friendly.
 
         Article Content:
         {text[:30000]} 
@@ -162,7 +163,7 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if summary:
             # We use a separator and link at the bottom for a cleaner look
-            message = f"{summary}\n\n---\n🔗 <a href=\"{url}\">Read Original Article</a>"
+            message = f"{summary}\n\n---\n🔗 <b><a href=\"{url}\">Read Full Article</a></b> ✨"
             try:
                 logger.info(f"Sending summary to Channel B ({CHANNEL_B_ID})...")
                 await context.bot.send_message(chat_id=CHANNEL_B_ID, text=message, parse_mode='HTML')

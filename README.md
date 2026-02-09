@@ -1,83 +1,86 @@
-# Telegram Post Summarizer Bot
+# 🤖 Telegram Post Summarizer Bot 📝
 
-A Telegram bot that listens to a specific channel (Channel A), extracts links from posts, scrapes the article content using `trafilatura`, generates a rich HTML summary using Google's Gemini API, and posts the summary to another channel (Channel B).
+A smart Telegram bot that listens to a specific channel (**Channel A**), extracts links from posts, scrapes article content using `trafilatura`, generates rich AI-powered summaries using **Google's Gemini API**, and posts them to another channel (**Channel B**). 🚀
 
-## Features
+## ✨ Features
 
--   **Automated Monitoring:** Listens to every message in a designated Telegram channel.
--   **Smart Extraction:** Detects URLs and scrapes main content using `trafilatura` with a fallback "recall" mode for better accuracy.
--   **AI Summarization:** Uses **Gemini 3 Flash Preview** (via `google-genai` SDK) for lightning-fast and intelligent summaries.
--   **Rich Formatting:** Delivers summaries in professional HTML format, including bold titles, blockquotes for overviews, and bulleted takeaways.
--   **Security:** Built-in **User ID filtering** to prevent unauthorized usage of your API keys.
--   **Broadcasting:** Automatically forwards the polished summary to a second channel.
--   **Error Reporting:** Automatically notifies the destination channel if a link fails to process.
+-   **📡 Automated Monitoring:** Listens to every message in your designated Telegram source channel.
+-   **🔍 Smart Extraction:** Automatically detects URLs and scrapes main content with a fallback "recall" mode for high accuracy.
+-   **🧠 AI Summarization:** Powered by **Gemini 3 Flash Preview** ⚡️ for lightning-fast and intelligent summaries.
+-   **🎨 Rich Formatting:** Delivers beautiful summaries in professional HTML format with bold titles, blockquotes, and bullet points.
+-   **🛡️ Security First:** Built-in **User ID filtering** to protect your API keys from unauthorized usage.
+-   **📢 Auto-Broadcasting:** Automatically sends the polished summary to your destination channel.
+-   **⚠️ Error Reporting:** Notifies you in the destination channel if a link fails to process, so you're never in the dark.
 
-## Prerequisites
+## 📋 Prerequisites
 
-You need the following:
+You'll need a few things to get started:
 
-1.  **Telegram Bot Token:** Create a new bot via [BotFather](https://t.me/botfather) on Telegram.
-2.  **Gemini API Key:** Get an API key from [Google AI Studio](https://aistudio.google.com/).
-3.  **Channel IDs:**
-    *   Add your bot to both Channel A (Source) and Channel B (Destination) as an **Admin**.
-    *   To get the Channel ID: Forward a message from the channel to [userinfobot](https://t.me/userinfobot) or [JsonDumpBot](https://t.me/jsondumpbot). IDs usually start with `-100`.
+1.  **🤖 Telegram Bot Token:** Create your bot via [@BotFather](https://t.me/botfather).
+2.  **🔑 Gemini API Key:** Grab an API key from [Google AI Studio](https://aistudio.google.com/).
+3.  **🆔 Channel IDs:**
+    *   Add your bot as an **Admin** 👮‍♂️ to both Channel A (Source) and Channel B (Destination).
+    *   **Find your ID:** Forward a message from the channel to [@userinfobot](https://t.me/userinfobot). IDs usually look like `-100xxxxxxxxxx`.
 
-## Security & User Filtering
+## 🔐 Security & User Filtering
 
-By default, the bot listens to all messages in the configured Channel A. To prevent unauthorized usage:
+To keep your bot safe and prevent unwanted API costs:
 
-1.  **Get your Telegram User ID:** Message [@userinfobot](https://t.me/userinfobot).
-2.  **Set the Environment Variable:** Add `AUTHORIZED_USER_ID=your_id_here` to your configuration.
-3.  **Result:** The bot will only process messages where the sender matches this ID. Unauthorized attempts are logged but ignored.
+1.  **🆔 Get your User ID:** Message [@userinfobot](https://t.me/userinfobot) to get your numerical ID.
+2.  **⚙️ Set the Variable:** Add `AUTHORIZED_USER_ID=your_id_here` to your configuration.
+3.  **✅ Result:** The bot will only process messages sent by *you*. Unauthorized attempts are silently logged. 🕵️‍♂️
 
-## Local Development & Testing
+## 💻 Local Development & Testing
 
-1.  **Clone the repository:**
+1.  **📥 Clone & Enter:**
     ```bash
     git clone <your-repo-url>
     cd post_summarizer_bot
     ```
 
-2.  **Install dependencies:**
-    It is recommended to use [uv](https://github.com/astral-sh/uv) for environment management.
+2.  **🛠️ Setup Environment:**
+    We recommend using [uv](https://github.com/astral-sh/uv) ⚡️:
     ```bash
     uv venv
     source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     uv pip install -r requirements.txt
     ```
 
-3.  **Configure Environment Variables:**
+3.  **⚙️ Configure:**
     ```bash
     cp .env.example .env
     ```
-    Open `.env` and fill in your tokens and IDs.
+    Fill in your tokens and IDs in the `.env` file. 📝
 
-4.  **Run the Bot:**
+4.  **🚀 Run:**
     ```bash
     uv run main.py
     ```
 
-5.  **Debug Scraping:**
-    If a specific URL is failing to scrape, use the included debugger:
+5.  **🧪 Debug Scraping:**
+    Test specific URLs with the debugger:
     ```bash
     uv run python debug_scrape.py "https://example.com/article"
     ```
 
-## Deployment on Railway
+## ☁️ Deployment on Railway
 
-1.  **Fork/Push this repo to GitHub.**
-2.  **Create a New Project on Railway:** Select "Deploy from GitHub repo".
-3.  **Configure Variables:** Add the variables from your `.env` in the Railway **Variables** tab.
-4.  **Deploy:** Railway will automatically build and start the bot using the provided `Procfile` and `runtime.txt`.
+1.  **🐙 GitHub:** Push your code to a GitHub repo.
+2.  **🚂 Railway:** Create a "New Project" and select your repo.
+3.  **⚙️ Variables:** Add all your `.env` variables in the Railway dashboard.
+4.  **🚢 Deploy:** Railway will handle the rest! Your bot will be live in minutes. 🎊
 
-## Customization
+## 🛠️ Customization
 
--   **Prompt Tuning:** Modify the `summarize_content` function in `main.py` to change the summary's tone, length, or structure.
--   **Model Choice:** The bot currently uses `gemini-3-flash-preview`. This is documented in `GEMINI.md`.
+-   **✍️ Prompt Tuning:** Edit `summarize_content` in `main.py` to change the summary's vibe.
+-   **🤖 Model Choice:** We use `gemini-3-flash-preview`. See `GEMINI.md` for details.
 
-## Future Work
+## 🗺️ Future Work
 
--   [ ] **Multi-Model Support:** Add support for other providers like OpenAI (GPT-4o) or Anthropic (Claude).
--   [ ] **Advanced Scraping:** Integrate Browserless or Playwright to handle JavaScript-heavy websites that `trafilatura` might miss.
--   [ ] **Whitelisting:** Expand the security filter to support a list of multiple authorized User IDs.
--   [ ] **Custom Prompting per Message:** Allow users to send specific instructions alongside a link for tailored summaries.
+-   [ ] **🔌 Multi-Model Support:** Add OpenAI or Anthropic integration.
+-   [ ] **🌐 Advanced Scraping:** Playwright/Browserless for JS-heavy sites.
+-   [ ] **👥 Whitelisting:** Support for multiple authorized users.
+-   [ ] **💬 Custom Instructions:** Tailor summaries via message captions.
+
+---
+Built with ❤️ and Gemini 🚀
