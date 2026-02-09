@@ -14,7 +14,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MODEL_NAME = 'gemini-3-flash-preview'
 
 async def test_summary(url):
-    print(f"🚀 Testing summary for: {url}")
+    print(f"\n🚀 Testing summary for: {url}")
     
     # 1. Scrape
     print("📥 Scraping content...")
@@ -47,11 +47,9 @@ async def test_summary(url):
         )
         summary = response.text
         
-        print("
---- ✨ GENERATED SUMMARY ---")
+        print("\n--- ✨ GENERATED SUMMARY ---")
         print(summary)
-        print("----------------------------
-")
+        print("----------------------------\n")
         print("📝 Note: The above is HTML-formatted for Telegram.")
         
     except Exception as e:
