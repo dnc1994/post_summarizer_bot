@@ -63,12 +63,59 @@ To keep your bot safe and prevent unwanted API costs:
     uv run python debug_scrape.py "https://example.com/article"
     ```
 
-## ☁️ Deployment on Railway
+## 🚀 Deployment
 
+The bot is designed as a **long-running process**. It needs to stay active 24/7 to listen for updates from Telegram.
+
+### 🏠 General Requirements
+Regardless of where you host, you will need:
+-   **Python 3.10+**
+-   **Persistent Internet Connection:** To poll the Telegram API.
+-   **Environment Variables:** You must configure the following in your host environment:
+    - `TELEGRAM_BOT_TOKEN`
+    - `CHANNEL_A_ID`
+    - `CHANNEL_B_ID`
+    - `GEMINI_API_KEY`
+    - `AUTHORIZED_USER_ID` (Recommended)
+
+---
+
+### 🚂 Option 1: Railway (Recommended)
+Railway is extremely easy for bot deployment:
 1.  **🐙 GitHub:** Push your code to a GitHub repo.
-2.  **🚂 Railway:** Create a "New Project" and select your repo.
-3.  **⚙️ Variables:** Add all your `.env` variables in the Railway dashboard.
-4.  **🚢 Deploy:** Railway will handle the rest! Your bot will be live in minutes. 🎊
+2.  **➕ New Project:** In Railway, click "New Project" -> "Deploy from GitHub repo".
+3.  **⚙️ Variables:** Go to the **Variables** tab and add all keys from your `.env`.
+4.  **🚢 Deploy:** Railway will use the `Procfile` and `runtime.txt` automatically.
+
+### ☁️ Option 2: Render
+1.  Create a **Background Worker** (since this isn't a web service).
+2.  Connect your GitHub repository.
+3.  Set the start command to: `python main.py`.
+4.  Add your environment variables in the **Environment** tab.
+
+### 🪽 Option 3: Fly.io
+1.  Install the Fly CLI and run `fly launch`.
+2.  Fly will detect the project as Python.
+3.  Set secrets using `fly secrets set KEY=VALUE`.
+4.  Run `fly deploy`.
+
+### 🐧 Option 4: Linux VPS (Systemd)
+If you have your own server, you can run it as a service:
+```ini
+# /etc/systemd/system/telegram-bot.service
+[Unit]
+Description=Telegram Summarizer Bot
+After=network.target
+
+[Service]
+WorkingDirectory=/path/to/bot
+ExecStart=/path/to/venv/bin/python main.py
+EnvironmentFile=/path/to/bot/.env
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
 
 ## 🛠️ Customization
 
