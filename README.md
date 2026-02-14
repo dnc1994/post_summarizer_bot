@@ -144,7 +144,13 @@ WantedBy=multi-user.target
 
 ## 🗺️ Future Work
 
--   [ ] **🔌 Multi-Model Support:** Add OpenAI or Anthropic integration.
+- [ ] **📊 Observability & Evaluation:** Integrate with tools like **Langfuse** to log prompts, responses, and latency.
+
+- [ ] **👍 User Feedback:** Implement Telegram inline buttons (e.g., 👍/👎) to collect feedback on summaries, enabling offline evaluation and "quality hill climbing" for prompt optimization.
+
+- [ ] **🔌 Multi-Model Support:** Add OpenAI or Anthropic integration.
+
+
 -   [ ] **🌐 Advanced Scraping:** Playwright/Browserless for JS-heavy sites.
 -   [ ] **👥 Whitelisting:** Support for multiple authorized users.
 -   [ ] **💬 Custom Instructions:** Tailor summaries via message captions.
