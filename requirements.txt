@@ -1,4 +1,5 @@
 python-telegram-bot
 trafilatura
+lxml_html_clean
 google-genai
 python-dotenv
