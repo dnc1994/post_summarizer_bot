@@ -1,16 +1,14 @@
 import os
 import logging
-import asyncio
 import re
-from urllib.parse import urlparse
 
 import trafilatura
 from google import genai
-from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CallbackQueryHandler, filters
 from dotenv import load_dotenv
 
-from prompts import SUMMARIZATION_PROMPT_TEMPLATE
+import summarizer
 
 # Load environment variables
 load_dotenv()
@@ -44,6 +42,11 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 # Using gemini-3-flash-preview
 MODEL_NAME = 'gemini-3-flash-preview'
 
+# Maps message_id → url for retry button functionality.
+# Resets on bot restart; old retry buttons will fail gracefully with a user-visible error.
+_url_store: dict[int, str] = {}
+
+
 def extract_url(text):
     """Extracts the first URL from the text."""
     url_pattern = r'(https?://\S+)'
@@ -56,44 +59,52 @@ def scrape_content(url):
     try:
         # Some sites block default scrapers; trafilatura's fetch_url is basic
         downloaded = trafilatura.fetch_url(url)
-        
+
         if downloaded:
             # favor_recall=True makes extraction less strict, helpful for non-standard blogs
             text = trafilatura.extract(downloaded, favor_recall=True, include_comments=False)
-            
+
             if text:
                 logger.info(f"Successfully scraped {len(text)} characters from {url}")
                 return text
             else:
                 logger.warning(f"Trafilatura failed to find article content in the HTML from {url}")
-                # You could log the first 500 chars of 'downloaded' here if you really need to see the HTML
         else:
             logger.warning(f"Could not download content from {url} (HTTP error or blocking)")
     except Exception as e:
         logger.error(f"Error scraping {url}: {e}")
     return None
 
-async def summarize_content(text):
-    """Summarizes the text using Gemini API."""
-    try:
-        logger.info(f"Sending content to Gemini ({MODEL_NAME})...")
-        # Use the template from prompts.py
-        prompt = SUMMARIZATION_PROMPT_TEMPLATE.format(text=text[:30000])
-        
-        response = await client.aio.models.generate_content(
-            model=MODEL_NAME,
-            contents=prompt,
+def _retry_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Retry", callback_data="retry")]])
+
+async def _process_url(url: str, message_id: int, bot) -> None:
+    """Scrape and summarize url, editing the placeholder message in place."""
+    article_text = scrape_content(url)
+    if not article_text:
+        await bot.edit_message_text(
+            chat_id=CHANNEL_B_ID, message_id=message_id, parse_mode='HTML',
+            text=f"❌ <b>Scraping Failed</b>\n\nCould not extract article content.\n\n🔗 {url}",
+            reply_markup=_retry_keyboard(),
         )
-        summary = response.text
-        logger.info("Summary generated successfully.")
-        return summary
-    except Exception as e:
-        logger.error(f"Error summarizing content: {e}")
-        return None
+        return
+
+    summary, error = await summarizer.summarize(client, MODEL_NAME, article_text)
+    if summary:
+        await bot.edit_message_text(
+            chat_id=CHANNEL_B_ID, message_id=message_id, parse_mode='HTML',
+            text=f"{summary}\n\n---\n🔗 <b><a href=\"{url}\">Read Full Article</a></b> ✨",
+        )
+    else:
+        await bot.edit_message_text(
+            chat_id=CHANNEL_B_ID, message_id=message_id, parse_mode='HTML',
+            text=f"❌ <b>Summarization Failed</b>\n\n{error}\n\n🔗 {url}",
+            reply_markup=_retry_keyboard(),
+        )
 
 async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler to process messages from Channel A."""
-    
+
     # 1. Security Check: User ID Filtering
     if AUTHORIZED_USER_ID:
         # For channel posts, effective_user might be None or represent the channel.
@@ -105,7 +116,7 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif not sender and update.channel_post:
             # Channel posts don't always have a 'user' unless signed.
             # If AUTHORIZED_USER_ID is set, we might want to be careful.
-            # For now, we'll assume if it's from the target channel, it's okay, 
+            # For now, we'll assume if it's from the target channel, it's okay,
             # UNLESS you specifically want to filter who posts to that channel (if signed).
             pass
 
@@ -136,42 +147,48 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     logger.info(f"Found URL: {url}")
-    
-    try:
-        article_text = scrape_content(url)
-        if not article_text:
-            logger.warning(f"Could not extract content from {url}")
-            await context.bot.send_message(
-                chat_id=CHANNEL_B_ID, 
-                text=f"❌ <b>Error:</b> Could not extract article content from {url}",
-                parse_mode='HTML'
-            )
-            return
 
-        summary = await summarize_content(article_text)
-        
-        if summary:
-            # We use a separator and link at the bottom for a cleaner look
-            message = f"{summary}\n\n---\n🔗 <b><a href=\"{url}\">Read Full Article</a></b> ✨"
-            try:
-                logger.info(f"Sending summary to Channel B ({CHANNEL_B_ID})...")
-                await context.bot.send_message(chat_id=CHANNEL_B_ID, text=message, parse_mode='HTML')
-                logger.info("Summary successfully sent to Channel B.")
-            except Exception as e:
-                logger.error(f"Failed to send message to Channel B: {e}")
-        else:
-            logger.error("Failed to generate summary.")
-            await context.bot.send_message(
-                chat_id=CHANNEL_B_ID, 
-                text=f"❌ <b>Error:</b> Gemini failed to generate a summary for {url}",
-                parse_mode='HTML'
-            )
+    # Send placeholder immediately
+    placeholder = await context.bot.send_message(
+        chat_id=CHANNEL_B_ID,
+        text=f"⏳ <b>Summarizing...</b>\n\n🔗 {url}",
+        parse_mode='HTML',
+    )
+    _url_store[placeholder.message_id] = url
+
+    try:
+        await _process_url(url, placeholder.message_id, context.bot)
     except Exception as e:
-        logger.error(f"Unexpected error processing {url}: {e}")
-        await context.bot.send_message(
-            chat_id=CHANNEL_B_ID, 
-            text=f"❌ <b>Unexpected Error:</b> {str(e)}\nURL: {url}",
-            parse_mode='HTML'
+        logger.error(f"Unexpected error for {url}: {e}")
+        await context.bot.edit_message_text(
+            chat_id=CHANNEL_B_ID, message_id=placeholder.message_id, parse_mode='HTML',
+            text=f"❌ <b>Unexpected Error</b>\n\n{e}\n\n🔗 {url}",
+            reply_markup=_retry_keyboard(),
+        )
+
+async def handle_retry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the Retry inline button press."""
+    query = update.callback_query
+    await query.answer()  # acknowledge button press; clears the loading indicator
+
+    message_id = query.message.message_id
+    url = _url_store.get(message_id)
+    if not url:
+        await query.answer("Original URL not found — please re-post the link.", show_alert=True)
+        return
+
+    await query.edit_message_text(
+        text=f"⏳ <b>Retrying summarization...</b>\n\n🔗 {url}",
+        parse_mode='HTML',
+    )
+    try:
+        await _process_url(url, message_id, context.bot)
+    except Exception as e:
+        logger.error(f"Unexpected error retrying {url}: {e}")
+        await context.bot.edit_message_text(
+            chat_id=CHANNEL_B_ID, message_id=message_id, parse_mode='HTML',
+            text=f"❌ <b>Unexpected Error</b>\n\n{e}\n\n🔗 {url}",
+            reply_markup=_retry_keyboard(),
         )
 
 async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -185,19 +202,17 @@ if __name__ == '__main__':
     # application.add_handler(MessageHandler(filters.ALL, log_all_updates), group=-1)
 
     try:
-        channel_a_int = int(CHANNEL_A_ID)
-        # Using a raw MessageHandler that catches channel posts
-        # Note: filters.UpdateType.CHANNEL_POST is crucial for channel bots
-        channel_handler = MessageHandler(filters.UpdateType.CHANNEL_POST, process_message)
-        application.add_handler(channel_handler)
-        
+        int(CHANNEL_A_ID)
+        application.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POST, process_message))
+        application.add_handler(CallbackQueryHandler(handle_retry, pattern="^retry$"))
+
         logger.info("--- Bot Configuration ---")
         logger.info(f"Target Channel A: {CHANNEL_A_ID}")
         logger.info(f"Target Channel B: {CHANNEL_B_ID}")
         logger.info(f"Gemini Model: {MODEL_NAME}")
         logger.info("-------------------------")
         logger.info("Bot started. Polling for updates...")
-        
+
         application.run_polling()
     except ValueError:
         logger.error("CHANNEL_A_ID must be an integer (e.g., -100123456789)")
