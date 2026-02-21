@@ -21,20 +21,27 @@ uv run python test_prompt.py "https://example.com/article"
 
 ## Architecture
 
-This is a single-file Telegram bot (`main.py`) with one companion module (`prompts.py`).
+The bot is split across two modules: `main.py` (Telegram wiring, handlers, state) and `summarizer.py` (Gemini call + Langfuse tracing). Prompt template lives in `prompts.py`.
 
 **Data flow:**
 1. The bot listens to Channel A via `python-telegram-bot` polling (`filters.UpdateType.CHANNEL_POST`)
 2. On each post, `extract_url()` finds the first URL in the message text/caption
-3. `scrape_content()` fetches and extracts article text using `trafilatura` (`favor_recall=True` for broader coverage)
-4. `summarize_content()` sends up to 30,000 chars to Gemini (`gemini-3-flash-preview`) using the prompt template in `prompts.py`
-5. The formatted HTML summary is posted to Channel B with a link back to the original article
+3. A placeholder message is immediately sent to Channel B ("⏳ Summarizing...")
+4. `scrape_content()` fetches and extracts article text using `trafilatura` (`favor_recall=True` for broader coverage)
+5. `summarizer.summarize()` sends up to 30,000 chars to Gemini (`gemini-3-flash-preview`) using the prompt template in `prompts.py`; wraps the call in a Langfuse generation span and returns `(summary, error, trace_id)`
+6. The placeholder is edited in-place: success → HTML summary with 👍/👎 feedback buttons; failure → error message with 🔄 Retry button
+
+**Feedback flow:**
+- 👍/👎 buttons call `handle_feedback`, which scores the Langfuse trace (`user_rating` BOOLEAN) and swaps the buttons to a "rated" state with an "✏️ Add note" option
+- "✏️ Add note" opens a bot DM deep-link (`t.me/bot?start=note_<message_id>`); `handle_start` parses the payload and stores `_pending_note[user_id] = message_id`; the user's next DM is captured by `handle_private_message` and scored as `user_comment` CATEGORICAL on the same trace
 
 **Key design details:**
 - Gemini model is always `gemini-3-flash-preview` — do not change unless explicitly asked
 - The prompt template in `prompts.py` produces Telegram-compatible HTML (only `<b>`, `<i>`, `<u>`, `<s>`, `<a>`, `<code>`, `<pre>`, `<blockquote>` are supported by Telegram)
 - `AUTHORIZED_USER_ID` optionally restricts which user's messages are processed; channel posts without a signed sender bypass this check
 - Error messages are sent to Channel B (not silently dropped) so failures are visible
+- Langfuse is optional: absent keys → `langfuse_client = None` → tracing and feedback scoring silently skipped; if tracing fails mid-call, summarization still succeeds but the message shows `⚠️ Tracing unavailable` and feedback buttons are omitted
+- `_url_store`, `_trace_store`, `_pending_note` are in-memory dicts; they reset on bot restart — old Retry/feedback buttons degrade gracefully
 
 **Required environment variables** (in `.env`):
 - `TELEGRAM_BOT_TOKEN`
@@ -42,5 +49,10 @@ This is a single-file Telegram bot (`main.py`) with one companion module (`promp
 - `CHANNEL_B_ID`
 - `GEMINI_API_KEY`
 - `AUTHORIZED_USER_ID` (optional)
+- `LANGFUSE_PUBLIC_KEY` (optional)
+- `LANGFUSE_SECRET_KEY` (optional)
+- `LANGFUSE_HOST` (optional, defaults to `https://cloud.langfuse.com`)
+
+**Python version:** Pinned to 3.13 via `.python-version` and `runtime.txt`. Do not change — Langfuse requires Python < 3.14 due to an internal Pydantic v1 dependency.
 
 **Deployment:** Uses `Procfile` and `runtime.txt` for Railway/Render. The bot is a long-running polling process, not a webhook server.

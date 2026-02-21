@@ -4,8 +4,9 @@ import re
 
 import trafilatura
 from google import genai
+from langfuse import Langfuse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CallbackQueryHandler, filters
+from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CallbackQueryHandler, CommandHandler, filters
 from dotenv import load_dotenv
 
 import summarizer
@@ -42,9 +43,30 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 # Using gemini-3-flash-preview
 MODEL_NAME = 'gemini-3-flash-preview'
 
+# Initialize Langfuse (optional — gracefully disabled when keys are absent)
+langfuse_client: Langfuse | None = None
+if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
+    langfuse_client = Langfuse(
+        public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+        secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+        host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
+    )
+    logger.info("Langfuse tracing enabled.")
+else:
+    logger.info("Langfuse keys not set — tracing disabled.")
+
 # Maps message_id → url for retry button functionality.
 # Resets on bot restart; old retry buttons will fail gracefully with a user-visible error.
 _url_store: dict[int, str] = {}
+
+# Maps message_id → Langfuse trace_id for feedback scoring.
+_trace_store: dict[int, str] = {}
+
+# Maps user_id → message_id for the DM note flow.
+_pending_note: dict[int, int] = {}
+
+# Bot username; set at startup via post_init.
+BOT_USERNAME: str = ""
 
 
 def extract_url(text):
@@ -78,6 +100,19 @@ def scrape_content(url):
 def _retry_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Retry", callback_data="retry")]])
 
+def _feedback_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("👍", callback_data="fb:up"),
+        InlineKeyboardButton("👎", callback_data="fb:down"),
+    ]])
+
+def _rated_keyboard(was_positive: bool) -> InlineKeyboardMarkup:
+    label = "✅ 👍" if was_positive else "✅ 👎"
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton(label, callback_data="fb:noop"),
+        InlineKeyboardButton("✏️ Add note", callback_data="fb:note"),
+    ]])
+
 async def _process_url(url: str, message_id: int, bot) -> None:
     """Scrape and summarize url, editing the placeholder message in place."""
     article_text = scrape_content(url)
@@ -89,11 +124,21 @@ async def _process_url(url: str, message_id: int, bot) -> None:
         )
         return
 
-    summary, error = await summarizer.summarize(client, MODEL_NAME, article_text)
+    summary, error, trace_id = await summarizer.summarize(
+        client, MODEL_NAME, article_text,
+        langfuse_client=langfuse_client, url=url,
+    )
     if summary:
+        tracing_failed = langfuse_client is not None and trace_id is None
+        if trace_id:
+            _trace_store[message_id] = trace_id
+        footer = f"{summary}\n\n---\n🔗 <b><a href=\"{url}\">Read Full Article</a></b> ✨"
+        if tracing_failed:
+            footer += "\n<i>⚠️ Tracing unavailable for this message.</i>"
         await bot.edit_message_text(
             chat_id=CHANNEL_B_ID, message_id=message_id, parse_mode='HTML',
-            text=f"{summary}\n\n---\n🔗 <b><a href=\"{url}\">Read Full Article</a></b> ✨",
+            text=footer,
+            reply_markup=_feedback_keyboard() if trace_id else None,
         )
     else:
         await bot.edit_message_text(
@@ -191,12 +236,82 @@ async def handle_retry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             reply_markup=_retry_keyboard(),
         )
 
+async def handle_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle 👍/👎 feedback and 'Add note' inline button presses."""
+    query = update.callback_query
+    action = query.data.split(":")[1]  # "up" | "down" | "note" | "noop"
+
+    if action == "noop":
+        await query.answer()
+        return
+
+    message_id = query.message.message_id
+
+    if action == "note":
+        _pending_note[query.from_user.id] = message_id
+        logger.info(f"Note flow started: user_id={query.from_user.id} message_id={message_id}")
+        await query.answer(url=f"https://t.me/{BOT_USERNAME}?start=note_{message_id}")
+        return
+
+    await query.answer()
+    was_positive = action == "up"
+    trace_id = _trace_store.get(message_id)
+    if trace_id and langfuse_client:
+        langfuse_client.create_score(
+            trace_id=trace_id,
+            name="user_rating",
+            value=1 if was_positive else 0,
+            data_type="BOOLEAN",
+        )
+        logger.info(f"Langfuse score recorded: trace_id={trace_id} user_rating={'up' if was_positive else 'down'}")
+    elif not trace_id:
+        logger.warning(f"Langfuse score skipped: no trace_id for message_id={message_id}")
+    await query.edit_message_reply_markup(reply_markup=_rated_keyboard(was_positive))
+
+async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /start in DMs — used to receive the note deep-link from the feedback flow."""
+    args = context.args
+    if args and args[0].startswith("note_"):
+        try:
+            message_id = int(args[0].removeprefix("note_"))
+        except ValueError:
+            return
+        _pending_note[update.effective_user.id] = message_id
+        await update.message.reply_text("Got it! Please type your feedback for this summary:")
+
+async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Collect free-form feedback text in a DM after the note flow is started."""
+    user_id = update.effective_user.id
+    message_id = _pending_note.pop(user_id, None)
+    if message_id is None:
+        return
+
+    trace_id = _trace_store.get(message_id)
+    if trace_id and langfuse_client:
+        langfuse_client.create_score(
+            trace_id=trace_id,
+            name="user_comment",
+            value=update.message.text,
+            data_type="CATEGORICAL",
+        )
+        logger.info(f"Langfuse score recorded: trace_id={trace_id} user_comment={update.message.text!r}")
+    elif not trace_id:
+        logger.warning(f"Langfuse score skipped: no trace_id for message_id={message_id}")
+    await update.message.reply_text("Thanks for the feedback! It's been recorded. ✅")
+
 async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Catch-all logger to see what's coming in."""
     logger.info(f"RAW UPDATE: {update.to_dict()}")
 
+async def post_init(application) -> None:
+    """Capture bot username at startup for use in deep-links."""
+    global BOT_USERNAME
+    me = await application.bot.get_me()
+    BOT_USERNAME = me.username
+    logger.info(f"Bot username: @{BOT_USERNAME}")
+
 if __name__ == '__main__':
-    application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
     # Log when we receive ANY update to help debug
     # application.add_handler(MessageHandler(filters.ALL, log_all_updates), group=-1)
@@ -205,6 +320,12 @@ if __name__ == '__main__':
         int(CHANNEL_A_ID)
         application.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POST, process_message))
         application.add_handler(CallbackQueryHandler(handle_retry, pattern="^retry$"))
+        application.add_handler(CallbackQueryHandler(handle_feedback, pattern="^fb:"))
+        application.add_handler(CommandHandler("start", handle_start))
+        application.add_handler(MessageHandler(
+            filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND,
+            handle_private_message,
+        ))
 
         logger.info("--- Bot Configuration ---")
         logger.info(f"Target Channel A: {CHANNEL_A_ID}")
