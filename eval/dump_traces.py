@@ -59,7 +59,8 @@ def extract_scores(scores: list) -> dict:
         if name == "user_rating":
             result["user_rating"] = getattr(score, "value", None)
         elif name == "user_comment":
-            result["user_comment"] = getattr(score, "string_value", None) or getattr(score, "value", None)
+            val = getattr(score, "string_value", None) or getattr(score, "value", None)
+            result["user_comment"] = str(val) if val is not None else None
     return result
 
 
