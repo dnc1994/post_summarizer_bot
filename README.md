@@ -13,6 +13,7 @@ A Telegram bot that listens to a source channel (**Channel A**), extracts links 
 - **👍👎 Feedback Buttons:** Rate summaries inline; add free-form comments via bot DM deep-link.
 - **📊 Langfuse Observability:** Optional integration — logs every generation (prompt, response, latency) and user feedback scores to [Langfuse](https://langfuse.com).
 - **⚠️ Error Reporting:** Notifies you in Channel B if a link fails to process.
+- **🧪 Eval Tooling (WIP):** Offline prompt hill-climbing loop — dump traces, generate rubrics, rate candidate prompts, and browse results in an HTML viewer.
 
 ## 📋 Prerequisites
 
