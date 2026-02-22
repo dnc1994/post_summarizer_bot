@@ -11,7 +11,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import timezone
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -63,67 +63,49 @@ def extract_scores(scores: list) -> dict:
     return result
 
 
-def fetch_trace_record(lf, trace_id: str) -> dict | None:
-    """Fetch a single trace and return a flat record dict, or None if unusable."""
-    try:
-        trace = lf.api.trace.get(trace_id)
-    except Exception as e:
-        print(f"  Warning: could not fetch trace {trace_id}: {e}", file=sys.stderr)
-        return None
+def fetch_trace_record(lf, trace_id: str, retries: int = 3) -> dict | None:
+    """Fetch a single trace and return a flat record dict, or None if unusable.
 
-    # Fetch generation observations for prompt input / response output / url
-    try:
-        obs_response = lf.api.observations.get_many(trace_id=trace_id, type="GENERATION")
-        observations = obs_response.data if hasattr(obs_response, "data") else []
-    except Exception as e:
-        print(f"  Warning: could not fetch observations for {trace_id}: {e}", file=sys.stderr)
-        observations = []
+    Uses trace.input / trace.output / trace.observations (already embedded in
+    the full trace response) — no separate observations.get_many() call needed.
+    """
+    trace = None
+    for attempt in range(retries):
+        try:
+            trace = lf.api.trace.get(trace_id)
+            break
+        except Exception as e:
+            if attempt < retries - 1:
+                wait = 2 ** attempt
+                print(f"  Retrying trace {trace_id} in {wait}s ({e})...", flush=True)
+                time.sleep(wait)
+            else:
+                print(f"  Warning: could not fetch trace {trace_id}: {e}", file=sys.stderr)
+                return None
 
-    # Pick the first generation observation
-    prompt_text = None
-    response_text = None
+    # Prompt and response live directly on the trace
+    prompt_text = getattr(trace, "input", None)
+    if prompt_text is not None and not isinstance(prompt_text, str):
+        prompt_text = str(prompt_text)
+
+    response_text = getattr(trace, "output", None)
+    if response_text is not None and not isinstance(response_text, str):
+        response_text = str(response_text)
+
+    # URL is in trace.metadata; fall back to first observation's metadata
     url = None
+    trace_meta = getattr(trace, "metadata", None) or {}
+    if isinstance(trace_meta, dict):
+        url = trace_meta.get("url")
 
-    for obs in observations:
-        if prompt_text is None:
-            input_val = getattr(obs, "input", None)
-            if input_val:
-                if isinstance(input_val, str):
-                    prompt_text = input_val
-                elif isinstance(input_val, list):
-                    # List of message dicts — join content
-                    parts = []
-                    for msg in input_val:
-                        if isinstance(msg, dict):
-                            parts.append(msg.get("content", ""))
-                        else:
-                            parts.append(str(msg))
-                    prompt_text = "\n".join(parts)
-                else:
-                    prompt_text = str(input_val)
-
-        if response_text is None:
-            output_val = getattr(obs, "output", None)
-            if output_val:
-                if isinstance(output_val, str):
-                    response_text = output_val
-                elif isinstance(output_val, dict):
-                    response_text = output_val.get("text") or output_val.get("content") or str(output_val)
-                else:
-                    response_text = str(output_val)
-
-        if url is None:
-            metadata = getattr(obs, "metadata", None) or {}
-            if isinstance(metadata, dict):
-                url = metadata.get("url")
-
-    # Fall back to trace-level metadata for url
     if url is None:
-        trace_meta = getattr(trace, "metadata", None) or {}
-        if isinstance(trace_meta, dict):
-            url = trace_meta.get("url")
+        for obs in (getattr(trace, "observations", None) or []):
+            obs_meta = getattr(obs, "metadata", None) or {}
+            if isinstance(obs_meta, dict) and obs_meta.get("url"):
+                url = obs_meta["url"]
+                break
 
-    # Extract article_text from prompt (between last occurrence of "Article Content:\n" and end)
+    # Extract article_text: everything after the last "Article Content:\n"
     article_text = None
     if prompt_text:
         marker = "Article Content:\n"
@@ -136,10 +118,7 @@ def fetch_trace_record(lf, trace_id: str) -> dict | None:
 
     timestamp = getattr(trace, "timestamp", None)
     if timestamp is not None:
-        if hasattr(timestamp, "isoformat"):
-            timestamp = timestamp.isoformat()
-        else:
-            timestamp = str(timestamp)
+        timestamp = timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp)
 
     return {
         "trace_id": trace_id,
@@ -162,7 +141,7 @@ def main():
 
     lf = get_langfuse_client()
     existing_ids = load_existing_ids()
-    print(f"Existing traces in dataset: {len(existing_ids)}")
+    print(f"Existing traces in dataset: {len(existing_ids)}", flush=True)
 
     new_records = []
     skipped = 0
@@ -192,12 +171,11 @@ def main():
             if args.limit is not None and len(new_records) >= args.limit:
                 break
 
-            print(f"  Fetching trace {trace_id}...")
+            print(f"  Fetching trace {trace_id}...", flush=True)
             record = fetch_trace_record(lf, trace_id)
             if record:
                 new_records.append(record)
 
-        # Check if we've hit the limit or exhausted pages
         if args.limit is not None and len(new_records) >= args.limit:
             break
 
