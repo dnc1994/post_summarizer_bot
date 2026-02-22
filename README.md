@@ -131,6 +131,53 @@ WantedBy=multi-user.target
 - **✍️ Prompt Tuning:** Edit `SUMMARIZATION_PROMPT_TEMPLATE` in `prompts.py`. Use `test_prompt.py` to preview changes immediately.
 - **🤖 Model Choice:** The model is `gemini-3-flash-preview` (set as `MODEL_NAME` in `main.py`).
 
+## 🚧 Eval / Prompt Tuning Workflow (Under Construction)
+
+> **Note:** This section describes a workflow that is currently being built out. Scripts exist but have not yet been validated end-to-end against real data.
+
+An offline hill-climbing loop for systematically improving the prompt using collected feedback.
+
+### Overview
+
+```
+eval/
+  dump_traces.py          # Pull traces + feedback from Langfuse → local JSONL
+  gen_rubrics.py          # Generate boolean eval rubrics from feedback
+  autorater.py            # Score a candidate prompt file against all rubrics
+  prompts/
+    v1_baseline.txt       # Baseline prompt (copy of current prompts.py template)
+  data/
+    rubrics.json          # Principle-based rubrics (committed, human-reviewed)
+    example_rubrics.jsonl # Per-trace rubrics derived from user comments (committed)
+    traces.jsonl          # Scraped article content — gitignored
+    results/              # Per-run score reports — gitignored
+```
+
+### Usage
+
+```bash
+# 1. Pull new traces from Langfuse
+make eval-dump
+
+# 2. Generate rubrics (review and edit eval/data/rubrics.json before proceeding)
+make eval-rubrics
+
+# 3. Score the baseline prompt
+make eval-rate PROMPT=eval/prompts/v1_baseline.txt
+
+# 4. Write a new prompt variant, then compare
+make eval-rate PROMPT=eval/prompts/v2.txt
+```
+
+### Rubric Tiers
+
+| Tier | Scope | Applied to | Output |
+|---|---|---|---|
+| **Principle-based** | Global (`rubrics.json`) | Every example | Per-rubric pass rate |
+| **Example-specific** | Per-trace (`example_rubrics.jsonl`) | Matching trace only | Overall pass rate |
+
+Principle rubrics are LLM-generated from rated examples, then human-reviewed and committed. Example-specific rubrics are derived automatically from `user_comment` feedback scores in Langfuse.
+
 ## 🗺️ Future Work
 
 - [ ] **🌐 Advanced Scraping:** Playwright/Browserless for JS-heavy sites.

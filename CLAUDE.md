@@ -56,3 +56,35 @@ The bot is split across two modules: `main.py` (Telegram wiring, handlers, state
 **Python version:** Pinned to 3.13 via `.python-version` and `runtime.txt`. Do not change — Langfuse requires Python < 3.14 due to an internal Pydantic v1 dependency.
 
 **Deployment:** Uses `Procfile` and `runtime.txt` for Railway/Render. The bot is a long-running polling process, not a webhook server.
+
+## Eval / Prompt Tuning Workflow
+
+Offline hill-climbing loop for improving the prompt. No new dependencies — uses existing `google-genai`, `langfuse`, and `python-dotenv`.
+
+```
+eval/
+  dump_traces.py          # Script 1: Langfuse → JSONL dataset
+  gen_rubrics.py          # Script 2: Generate boolean rubrics from feedback
+  autorater.py            # Script 3: Rate a candidate prompt file
+  prompts/
+    v1_baseline.txt       # Copy of current prompt (for reference/baseline run)
+  data/
+    .gitignore            # Ignores traces.jsonl and results/ (contain scraped content)
+    rubrics.json          # Principle-based rubrics — human-reviewed, committed to git
+    example_rubrics.jsonl # Example-specific rubrics — committed to git
+```
+
+**Workflow:**
+```bash
+make eval-dump                                    # Pull new traces from Langfuse
+make eval-rubrics                                 # Generate rubrics (review rubrics.json after)
+make eval-rate PROMPT=eval/prompts/v1_baseline.txt  # Score a candidate prompt
+```
+
+**Two rubric tiers:**
+- **Principle-based** (`rubrics.json`): global, applied to every example, shows per-rubric pass rate
+- **Example-specific** (`example_rubrics.jsonl`): per-trace, derived from user comments, keyed by `trace_id`
+
+**Eval scripts use `gemini-2.0-flash`** (not `gemini-2.5-flash-preview`) — independent from the bot's production model.
+
+**Gitignored:** `eval/data/traces.jsonl` and `eval/data/results/` (contain scraped article content). **Committed:** `eval/data/rubrics.json` and `eval/data/example_rubrics.jsonl`.
