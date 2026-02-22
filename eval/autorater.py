@@ -5,13 +5,9 @@ Given a prompt .txt file (must contain {text} placeholder), generates new summar
 for each example in the dataset, then evaluates all rubrics with an LLM judge.
 
 Usage:
-    uv run python eval/autorater.py \\
-      --prompt-file eval/prompts/v2.txt \\
-      [--dataset eval/data/traces.jsonl] \\
-      [--rubrics eval/data/rubrics.json] \\
-      [--example-rubrics eval/data/example_rubrics.jsonl] \\
-      [--output eval/data/results/v2_<ts>.json] \\
-      [--limit 20]
+    uv run python eval/autorater.py --version v1 --prompt-file eval/prompts/v2.txt [--limit 20]
+
+File paths default to eval/data/<version>/ and can be overridden individually.
 """
 
 import argparse
@@ -24,8 +20,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
-
-DATA_DIR = Path(__file__).parent / "data"
 
 
 def get_gemini_client():
@@ -87,7 +81,6 @@ Think step by step. Output ONLY valid JSON (no markdown fences):
 {{"reasoning": "your reasoning here", "pass": true}}"""
 
     text = call_gemini(client, judge_prompt, json_output=True)
-    # Strip markdown code fences if present
     if text.startswith("```"):
         lines = text.split("\n")
         text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
@@ -99,34 +92,33 @@ def print_results_table(prompt_file: str, examples: list[dict], principle_rubric
     n = len(examples)
     print(f"\nCandidate: {prompt_file}  |  {n} example(s)\n")
 
-    # Principle-based rubrics
     if principle_rubrics:
         print(f"PRINCIPLE-BASED RUBRICS (all {n} examples)")
         col_w = 60
         print(f"{'Rubric':<{col_w}}  {'Pass Rate':>10}")
         print("─" * col_w + "  " + "─" * 10)
 
-        rubric_pass_counts: dict[str, int] = {r["id"]: 0 for r in principle_rubrics}
-        rubric_totals: dict[str, int] = {r["id"]: 0 for r in principle_rubrics}
+        rubric_pass: dict[str, int] = {r["id"]: 0 for r in principle_rubrics}
+        rubric_total: dict[str, int] = {r["id"]: 0 for r in principle_rubrics}
 
         for ex in examples:
             for res in ex.get("principle_results", []):
                 rid = res["id"]
-                rubric_totals[rid] = rubric_totals.get(rid, 0) + 1
+                rubric_total[rid] = rubric_total.get(rid, 0) + 1
                 if res["pass"]:
-                    rubric_pass_counts[rid] = rubric_pass_counts.get(rid, 0) + 1
+                    rubric_pass[rid] = rubric_pass.get(rid, 0) + 1
 
         total_pass = 0
         total_evals = 0
         per_rubric_stats = []
         for r in principle_rubrics:
             rid = r["id"]
-            n_pass = rubric_pass_counts.get(rid, 0)
-            n_total = rubric_totals.get(rid, 0)
+            n_pass = rubric_pass.get(rid, 0)
+            n_total = rubric_total.get(rid, 0)
             rate = n_pass / n_total if n_total else 0
             label = f"{rid}: {r['statement']}"
             if len(label) > col_w:
-                label = label[: col_w - 3] + "..."
+                label = label[:col_w - 3] + "..."
             print(f"{label:<{col_w}}  {rate * 100:>9.1f}%")
             total_pass += n_pass
             total_evals += n_total
@@ -140,7 +132,6 @@ def print_results_table(prompt_file: str, examples: list[dict], principle_rubric
         per_rubric_stats = []
         overall = 0.0
 
-    # Example-specific rubrics
     n_with_ex = sum(1 for ex in examples if ex.get("example_results"))
     n_ex_evals = sum(len(ex.get("example_results", [])) for ex in examples)
     n_ex_pass = sum(
@@ -162,13 +153,19 @@ def print_results_table(prompt_file: str, examples: list[dict], principle_rubric
 
 def main():
     parser = argparse.ArgumentParser(description="Rate a candidate prompt against eval rubrics.")
-    parser.add_argument("--prompt-file", required=True, help="Path to prompt .txt file with {text} placeholder")
-    parser.add_argument("--dataset", default=str(DATA_DIR / "traces.jsonl"), help="Path to traces.jsonl")
-    parser.add_argument("--rubrics", default=str(DATA_DIR / "rubrics.json"), help="Path to rubrics.json")
-    parser.add_argument("--example-rubrics", default=str(DATA_DIR / "example_rubrics.jsonl"), help="Path to example_rubrics.jsonl")
-    parser.add_argument("--output", default=None, help="Output JSON path (default: auto-named in eval/data/results/)")
+    parser.add_argument("--version", required=True, help="Dataset version (e.g. v1)")
+    parser.add_argument("--prompt-file", required=True, help="Prompt .txt file with {text} placeholder")
+    parser.add_argument("--dataset", default=None, help="Override traces.jsonl path")
+    parser.add_argument("--rubrics", default=None, help="Override rubrics.json path")
+    parser.add_argument("--example-rubrics", default=None, help="Override example_rubrics.jsonl path")
+    parser.add_argument("--output", default=None, help="Override output JSON path")
     parser.add_argument("--limit", type=int, default=None, help="Max number of examples to evaluate")
     args = parser.parse_args()
+
+    data_dir = Path(__file__).parent / "data" / args.version
+    dataset_path = Path(args.dataset) if args.dataset else data_dir / "traces.jsonl"
+    rubrics_path = Path(args.rubrics) if args.rubrics else data_dir / "rubrics.json"
+    example_rubrics_path = Path(args.example_rubrics) if args.example_rubrics else data_dir / "example_rubrics.jsonl"
 
     prompt_path = Path(args.prompt_file)
     if not prompt_path.exists():
@@ -180,19 +177,14 @@ def main():
         print("Error: prompt file must contain {text} placeholder.", file=sys.stderr)
         sys.exit(1)
 
-    dataset_path = Path(args.dataset)
     if not dataset_path.exists():
-        print(f"Error: dataset not found: {dataset_path}. Run eval/dump_traces.py first.", file=sys.stderr)
+        print(f"Error: dataset not found: {dataset_path}. Run dump_traces.py --version {args.version} first.", file=sys.stderr)
         sys.exit(1)
 
-    rubrics_path = Path(args.rubrics)
-    example_rubrics_path = Path(args.example_rubrics)
-
-    # Load data
     traces = load_jsonl(dataset_path)
-    traces = [t for t in traces if t.get("article_text")]  # need article text to generate summary
+    traces = [t for t in traces if t.get("article_text")]
     if args.limit:
-        traces = traces[: args.limit]
+        traces = traces[:args.limit]
 
     principle_rubrics: list[dict] = []
     if rubrics_path.exists():
@@ -204,6 +196,7 @@ def main():
 
     example_rubrics_by_trace: dict[str, list[dict]] = {}
     if example_rubrics_path.exists():
+        # Handle duplicate trace_ids: use latest entry per trace
         for entry in load_jsonl(example_rubrics_path):
             tid = entry.get("trace_id")
             if tid:
@@ -216,27 +209,22 @@ def main():
         print("Error: no usable traces found (need article_text).", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\nEvaluating {len(traces)} example(s) with prompt: {prompt_path}\n")
+    print(f"\nVersion: {args.version} | Evaluating {len(traces)} example(s) with: {prompt_path}\n")
 
     client = get_gemini_client()
     evaluated_examples = []
 
     for i, trace in enumerate(traces, 1):
         trace_id = trace["trace_id"]
-        url = trace.get("url", "")
-        article_text = trace["article_text"]
-
         print(f"[{i}/{len(traces)}] trace_id={trace_id}")
 
-        # Generate new summary
         print(f"  Generating summary...")
         try:
-            new_response = generate_summary(client, prompt_template, article_text)
+            new_response = generate_summary(client, prompt_template, trace["article_text"])
         except Exception as e:
             print(f"  Error generating summary: {e}", file=sys.stderr)
             continue
 
-        # Evaluate principle rubrics
         principle_results = []
         for rubric in principle_rubrics:
             print(f"  Evaluating rubric {rubric['id']}...")
@@ -244,13 +232,11 @@ def main():
                 result = evaluate_rubric(client, rubric["statement"], new_response)
                 principle_results.append({"id": rubric["id"], **result})
             except Exception as e:
-                print(f"  Warning: rubric {rubric['id']} evaluation failed: {e}", file=sys.stderr)
+                print(f"  Warning: rubric {rubric['id']} failed: {e}", file=sys.stderr)
                 principle_results.append({"id": rubric["id"], "reasoning": f"Error: {e}", "pass": False})
 
-        # Evaluate example-specific rubrics
         example_results = []
-        ex_rubrics = example_rubrics_by_trace.get(trace_id, [])
-        for rubric in ex_rubrics:
+        for rubric in example_rubrics_by_trace.get(trace_id, []):
             print(f"  Evaluating example rubric {rubric['id']}...")
             try:
                 result = evaluate_rubric(client, rubric["statement"], new_response)
@@ -261,37 +247,31 @@ def main():
 
         evaluated_examples.append({
             "trace_id": trace_id,
-            "url": url,
+            "url": trace.get("url", ""),
             "response": new_response,
             "principle_results": principle_results,
             "example_results": example_results,
         })
 
-    # Print results table and collect stats
     per_rubric_stats, principle_overall, n_with_ex, n_ex_evals, ex_overall = print_results_table(
         args.prompt_file, evaluated_examples, principle_rubrics
     )
 
-    # Build output JSON
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     if args.output:
         output_path = Path(args.output)
     else:
-        results_dir = DATA_DIR / "results"
+        results_dir = data_dir / "results"
         results_dir.mkdir(parents=True, exist_ok=True)
-        stem = prompt_path.stem
-        output_path = results_dir / f"{stem}_{ts}.json"
+        output_path = results_dir / f"{prompt_path.stem}_{ts}.json"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-
     output = {
+        "version": args.version,
         "prompt_file": str(prompt_path),
         "timestamp": ts,
         "n_examples": len(evaluated_examples),
-        "principle": {
-            "overall_pass_rate": principle_overall,
-            "per_rubric": per_rubric_stats,
-        },
+        "principle": {"overall_pass_rate": principle_overall, "per_rubric": per_rubric_stats},
         "example_specific": {
             "n_examples_with_rubrics": n_with_ex,
             "n_total_evaluations": n_ex_evals,

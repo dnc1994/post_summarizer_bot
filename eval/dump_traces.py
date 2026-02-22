@@ -1,10 +1,11 @@
 """
-dump_traces.py — Pull traces from Langfuse and append new ones to eval/data/traces.jsonl.
+dump_traces.py — Pull traces from Langfuse and append new ones to a versioned dataset.
 
 Usage:
-    uv run python eval/dump_traces.py [--limit N]
+    uv run python eval/dump_traces.py --version v1 [--limit N]
 
-Idempotent: skips trace IDs already present in traces.jsonl.
+Idempotent: skips trace IDs already present in the dataset.
+Output: eval/data/<version>/traces.jsonl
 """
 
 import argparse
@@ -18,15 +19,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATA_DIR = Path(__file__).parent / "data"
-TRACES_FILE = DATA_DIR / "traces.jsonl"
 
-
-def load_existing_ids() -> set[str]:
-    if not TRACES_FILE.exists():
+def load_existing_ids(traces_file: Path) -> set[str]:
+    if not traces_file.exists():
         return set()
     ids = set()
-    with open(TRACES_FILE) as f:
+    with open(traces_file) as f:
         for line in f:
             line = line.strip()
             if line:
@@ -134,15 +132,18 @@ def fetch_trace_record(lf, trace_id: str, retries: int = 3) -> dict | None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Dump Langfuse traces to JSONL dataset.")
+    parser = argparse.ArgumentParser(description="Dump Langfuse traces to a versioned JSONL dataset.")
+    parser.add_argument("--version", required=True, help="Dataset version (e.g. v1)")
     parser.add_argument("--limit", type=int, default=None, help="Max number of new traces to fetch")
     args = parser.parse_args()
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    data_dir = Path(__file__).parent / "data" / args.version
+    traces_file = data_dir / "traces.jsonl"
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     lf = get_langfuse_client()
-    existing_ids = load_existing_ids()
-    print(f"Existing traces in dataset: {len(existing_ids)}", flush=True)
+    existing_ids = load_existing_ids(traces_file)
+    print(f"Version: {args.version} | Existing traces: {len(existing_ids)}", flush=True)
 
     new_records = []
     skipped = 0
@@ -190,13 +191,12 @@ def main():
 
         page += 1
 
-    # Append new records
-    with open(TRACES_FILE, "a") as f:
+    with open(traces_file, "a") as f:
         for record in new_records:
             f.write(json.dumps(record) + "\n")
 
-    print(f"\nDone. {len(new_records)} new trace(s) written, {skipped} skipped (already present).")
-    print(f"Dataset: {TRACES_FILE}")
+    print(f"\nDone. {len(new_records)} new trace(s) written, {skipped} skipped.")
+    print(f"Dataset: {traces_file}")
 
 
 if __name__ == "__main__":

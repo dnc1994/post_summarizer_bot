@@ -1,12 +1,12 @@
 """
-view_traces.py — Inspect the trace dataset without scrolling through long text.
+view_traces.py — Inspect a versioned trace dataset without scrolling through long text.
 
 Usage:
     # Compact list of all traces
-    uv run python eval/view_traces.py
+    uv run python eval/view_traces.py --version v1
 
     # Full detail for one trace (prompt/response truncated to --width chars per line)
-    uv run python eval/view_traces.py --trace-id <id> [--width 120]
+    uv run python eval/view_traces.py --version v1 --trace-id <id> [--width 120]
 """
 
 import argparse
@@ -14,18 +14,15 @@ import json
 import textwrap
 from pathlib import Path
 
-DATA_DIR = Path(__file__).parent / "data"
-TRACES_FILE = DATA_DIR / "traces.jsonl"
-
 TERM_WIDTH = 100
 
 
-def load_traces() -> list[dict]:
-    if not TRACES_FILE.exists():
-        print(f"No dataset found at {TRACES_FILE}. Run make eval-dump first.")
+def load_traces(traces_file: Path) -> list[dict]:
+    if not traces_file.exists():
+        print(f"No dataset found at {traces_file}. Run make eval-dump VERSION=<v> first.")
         return []
     records = []
-    with open(TRACES_FILE) as f:
+    with open(traces_file) as f:
         for line in f:
             line = line.strip()
             if line:
@@ -49,12 +46,11 @@ def truncate(s, n: int) -> str:
     return s[:n] + "…" if len(s) > n else s
 
 
-def print_list(traces: list[dict]):
+def print_list(traces: list[dict], traces_file: Path):
     if not traces:
         print("No traces.")
         return
 
-    # Header
     print(f"\n{'#':<4} {'TRACE ID':<10} {'RATING':<7} {'URL':<45} {'COMMENT':<30} {'CHARS (prompt/resp/article)'}")
     print("─" * TERM_WIDTH)
 
@@ -68,7 +64,7 @@ def print_list(traces: list[dict]):
         al = len(t.get("article_text") or "")
         print(f"{i:<4} {tid:<10} {rating:<7} {url:<45} {comment:<30} {pl}/{rl}/{al}")
 
-    print(f"\n{len(traces)} trace(s) in {TRACES_FILE}")
+    print(f"\n{len(traces)} trace(s) in {traces_file}")
 
 
 def print_field(label: str, text: str | None, width: int, max_lines: int = 40):
@@ -107,12 +103,15 @@ def print_detail(trace: dict, width: int):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="View trace dataset.")
+    parser = argparse.ArgumentParser(description="View a versioned trace dataset.")
+    parser.add_argument("--version", required=True, help="Dataset version (e.g. v1)")
     parser.add_argument("--trace-id", default=None, help="Show full detail for a specific trace (prefix match)")
     parser.add_argument("--width", type=int, default=120, help="Max line width for detail view (default: 120)")
     args = parser.parse_args()
 
-    traces = load_traces()
+    data_dir = Path(__file__).parent / "data" / args.version
+    traces_file = data_dir / "traces.jsonl"
+    traces = load_traces(traces_file)
     if not traces:
         return
 
@@ -127,7 +126,7 @@ def main():
         for t in matches:
             print_detail(t, args.width)
     else:
-        print_list(traces)
+        print_list(traces, traces_file)
 
 
 if __name__ == "__main__":

@@ -1,14 +1,15 @@
 """
 gen_rubrics.py — Generate evaluation rubrics from trace feedback.
 
-Produces two outputs:
-  eval/data/rubrics.json          — Principle-based rubrics (global, human-reviewed)
-  eval/data/example_rubrics.jsonl — Example-specific rubrics (per trace, from user comments)
+Produces two outputs (both in eval/data/<version>/):
+  rubrics.json          — Principle-based rubrics (global, human-reviewed)
+  example_rubrics.jsonl — Example-specific rubrics (per trace, from user comments)
 
 Usage:
-    uv run python eval/gen_rubrics.py
+    uv run python eval/gen_rubrics.py --version v1
 """
 
+import argparse
 import json
 import os
 import sys
@@ -17,11 +18,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
-
-DATA_DIR = Path(__file__).parent / "data"
-TRACES_FILE = DATA_DIR / "traces.jsonl"
-RUBRICS_FILE = DATA_DIR / "rubrics.json"
-EXAMPLE_RUBRICS_FILE = DATA_DIR / "example_rubrics.jsonl"
 
 
 def get_gemini_client():
@@ -34,12 +30,12 @@ def get_gemini_client():
     return genai.Client(api_key=api_key)
 
 
-def load_traces() -> list[dict]:
-    if not TRACES_FILE.exists():
-        print(f"Error: {TRACES_FILE} not found. Run eval/dump_traces.py first.", file=sys.stderr)
+def load_traces(traces_file: Path) -> list[dict]:
+    if not traces_file.exists():
+        print(f"Error: {traces_file} not found. Run dump_traces.py --version <v> first.", file=sys.stderr)
         sys.exit(1)
     records = []
-    with open(TRACES_FILE) as f:
+    with open(traces_file) as f:
         for line in f:
             line = line.strip()
             if line:
@@ -50,16 +46,16 @@ def load_traces() -> list[dict]:
     return records
 
 
-def load_processed_comments() -> dict[str, str | None]:
-    """Return {trace_id: generated_from_comment} for entries already in example_rubrics.jsonl.
+def load_processed_comments(example_rubrics_file: Path) -> dict[str, str | None]:
+    """Return {trace_id: generated_from_comment} for entries already processed.
 
-    When duplicate trace_ids exist (append-only re-generation), keeps the latest entry.
-    A None value means the entry predates the generated_from_comment field.
+    When duplicate trace_ids exist (append-only re-generation), keeps the latest.
+    None means the entry predates the generated_from_comment field.
     """
-    if not EXAMPLE_RUBRICS_FILE.exists():
+    if not example_rubrics_file.exists():
         return {}
     result: dict[str, str | None] = {}
-    with open(EXAMPLE_RUBRICS_FILE) as f:
+    with open(example_rubrics_file) as f:
         for line in f:
             line = line.strip()
             if line:
@@ -67,7 +63,7 @@ def load_processed_comments() -> dict[str, str | None]:
                     entry = json.loads(line)
                     tid = entry.get("trace_id")
                     if tid:
-                        result[tid] = entry.get("generated_from_comment")  # None if absent
+                        result[tid] = entry.get("generated_from_comment")
                 except (json.JSONDecodeError, KeyError):
                     pass
     return result
@@ -86,7 +82,6 @@ def call_gemini_json(client, prompt: str) -> list | dict:
         ),
     )
     text = response.text.strip()
-    # Strip markdown code fences if present
     if text.startswith("```"):
         lines = text.split("\n")
         text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
@@ -112,16 +107,13 @@ def generate_principle_rubrics(client, traces: list[dict]) -> list[dict]:
             out.append(entry)
         return "\n\n---\n\n".join(out) if out else "(none)"
 
-    pos_block = fmt_examples(positives)
-    neg_block = fmt_examples(negatives, include_comment=True)
-
     prompt = f"""You are designing evaluation criteria for an AI article summarizer bot that outputs Telegram-compatible HTML summaries.
 
 POSITIVELY RATED summaries (users gave thumbs up):
-{pos_block}
+{fmt_examples(positives)}
 
 NEGATIVELY RATED summaries with user comments (users gave thumbs down):
-{neg_block}
+{fmt_examples(negatives, include_comment=True)}
 
 Generate 8-12 boolean rubric statements that capture what makes a good summary.
 Each rubric must be:
@@ -173,32 +165,40 @@ Return a JSON array (no markdown fences):
 
 
 def main():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser(description="Generate evaluation rubrics from trace feedback.")
+    parser.add_argument("--version", required=True, help="Dataset version (e.g. v1)")
+    args = parser.parse_args()
+
+    data_dir = Path(__file__).parent / "data" / args.version
+    traces_file = data_dir / "traces.jsonl"
+    rubrics_file = data_dir / "rubrics.json"
+    example_rubrics_file = data_dir / "example_rubrics.jsonl"
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     client = get_gemini_client()
-    traces = load_traces()
-    print(f"Loaded {len(traces)} trace(s) from {TRACES_FILE}")
+    traces = load_traces(traces_file)
+    print(f"Version: {args.version} | Loaded {len(traces)} trace(s)")
 
     # ── Principle-based rubrics ──────────────────────────────────────────────
-    if RUBRICS_FILE.exists():
-        answer = input(f"\n{RUBRICS_FILE} already exists. Overwrite? [y/N] ").strip().lower()
+    if rubrics_file.exists():
+        answer = input(f"\n{rubrics_file} already exists. Overwrite? [y/N] ").strip().lower()
         if answer != "y":
             print("Skipping principle rubric generation.")
         else:
             rubrics = generate_principle_rubrics(client, traces)
-            with open(RUBRICS_FILE, "w") as f:
+            with open(rubrics_file, "w") as f:
                 json.dump(rubrics, f, indent=2)
-            print(f"Wrote {len(rubrics)} principle rubric(s) to {RUBRICS_FILE}")
+            print(f"Wrote {len(rubrics)} principle rubric(s) to {rubrics_file}")
             print("Review and edit rubrics.json before running autorater.")
     else:
         rubrics = generate_principle_rubrics(client, traces)
-        with open(RUBRICS_FILE, "w") as f:
+        with open(rubrics_file, "w") as f:
             json.dump(rubrics, f, indent=2)
-        print(f"Wrote {len(rubrics)} principle rubric(s) to {RUBRICS_FILE}")
+        print(f"Wrote {len(rubrics)} principle rubric(s) to {rubrics_file}")
         print("Review and edit rubrics.json before running autorater.")
 
     # ── Example-specific rubrics ─────────────────────────────────────────────
-    processed = load_processed_comments()
+    processed = load_processed_comments(example_rubrics_file)
     candidates = [
         t for t in traces
         if t.get("user_comment") and t.get("response")
@@ -210,7 +210,7 @@ def main():
     print(f"\nTraces with new or updated user comments: {len(candidates)}")
 
     new_entries = 0
-    with open(EXAMPLE_RUBRICS_FILE, "a") as f:
+    with open(example_rubrics_file, "a") as f:
         for trace in candidates:
             print(f"  Generating example rubrics for trace {trace['trace_id']}...")
             try:
@@ -225,7 +225,7 @@ def main():
             except Exception as e:
                 print(f"    Warning: failed for trace {trace['trace_id']}: {e}", file=sys.stderr)
 
-    print(f"Appended {new_entries} new example rubric entry(ies) to {EXAMPLE_RUBRICS_FILE}")
+    print(f"Appended {new_entries} new example rubric entry(ies) to {example_rubrics_file}")
 
 
 if __name__ == "__main__":

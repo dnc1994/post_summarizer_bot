@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Eval Viewer</title>
+<!-- __PRELOADED__ -->
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -64,6 +65,15 @@ body {
 .file-row { display: flex; align-items: center; gap: 5px; }
 .file-st { font-size: 11px; color: #64748b; }
 .file-st.ok { color: #4ade80; }
+
+.version-pill {
+  background: rgba(255,255,255,0.15);
+  color: #f1f5f9;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-family: monospace;
+}
 
 /* ── Badges ──────────────────────────────────────────────────────────────── */
 .badge {
@@ -207,21 +217,36 @@ body {
   margin-bottom: 5px;
   background: var(--surface);
 }
-.rubric-item.editing { border-color: #f59e0b; background: #fffbeb; }
+
+/* Edit mode: switch to column so textarea spans full width */
+.rubric-item.editing {
+  flex-direction: column;
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+.rubric-edit-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
 .rubric-stmt { flex: 1; font-size: 12.5px; line-height: 1.5; padding-top: 1px; }
 .rubric-ta {
-  flex: 1;
+  width: 100%;
   font-size: 12.5px;
-  line-height: 1.5;
+  line-height: 1.6;
   border: 1px solid #d1d5db;
   border-radius: 4px;
-  padding: 4px 7px;
+  padding: 6px 8px;
   resize: vertical;
-  min-height: 52px;
+  min-height: 72px;
   font-family: inherit;
   background: white;
+  margin-top: 6px;
 }
 .rubric-ta:focus { outline: none; border-color: var(--accent); }
+
 .rubric-actions { display: flex; gap: 2px; flex-shrink: 0; }
 .icon-btn {
   background: none;
@@ -235,7 +260,7 @@ body {
 }
 .icon-btn:hover { background: var(--bg); color: var(--text); }
 .icon-btn.del:hover { background: #fee2e2; color: #dc2626; }
-.edit-actions { display: flex; gap: 5px; margin-top: 5px; }
+.edit-actions { display: flex; gap: 5px; margin-top: 7px; }
 
 .add-btn {
   display: flex;
@@ -258,20 +283,7 @@ body {
 
 <header class="header">
   <h1>Eval Viewer</h1>
-  <div class="file-row">
-    <label class="btn btn-ghost btn-sm" style="cursor:pointer">
-      Load traces.jsonl
-      <input type="file" accept=".jsonl" style="display:none" onchange="loadTraces(event)">
-    </label>
-    <span class="file-st" id="traces-st">not loaded</span>
-  </div>
-  <div class="file-row">
-    <label class="btn btn-ghost btn-sm" style="cursor:pointer">
-      Load example_rubrics.jsonl
-      <input type="file" accept=".jsonl" style="display:none" onchange="loadRubrics(event)">
-    </label>
-    <span class="file-st" id="rubrics-st">not loaded</span>
-  </div>
+  <div id="header-controls"></div>
   <span id="unsaved-badge" class="badge b-warn" style="display:none">● unsaved changes</span>
   <button class="btn btn-primary btn-sm" onclick="exportRubrics()">⬇ Export example_rubrics.jsonl</button>
 </header>
@@ -298,8 +310,53 @@ let savedRubrics = new Map();  // trace_id → rubric[]  (from loaded file, merg
 let editedRubrics = new Map(); // trace_id → rubric[]  (unsaved edits)
 let selectedId = null;
 let activeTab = 'response';
+let versionRelPath = null;     // e.g. "eval/data/v1" — set when pre-loaded
 
-// ── File loading ───────────────────────────────────────────────────────────────
+// ── Startup ────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof window.PRELOADED !== 'undefined') {
+    initPreloaded(window.PRELOADED);
+  } else {
+    initFilePickers();
+  }
+});
+
+function initPreloaded(data) {
+  versionRelPath = data.relPath || null;
+  traces = data.traces || [];
+  initRubricsFromEntries(data.exampleRubrics || []);
+
+  const controls = document.getElementById('header-controls');
+  controls.innerHTML = `
+    <span class="version-pill">${data.version}</span>
+    <span class="file-st ok" style="font-size:11px">
+      ${traces.length} traces · ${savedRubrics.size} with rubrics · auto-loaded from ${data.relPath}/
+    </span>`;
+
+  renderList();
+}
+
+function initFilePickers() {
+  const controls = document.getElementById('header-controls');
+  controls.innerHTML = `
+    <div class="file-row">
+      <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+        Load traces.jsonl
+        <input type="file" accept=".jsonl" style="display:none" onchange="loadTraces(event)">
+      </label>
+      <span class="file-st" id="traces-st">not loaded</span>
+    </div>
+    <div class="file-row">
+      <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+        Load example_rubrics.jsonl
+        <input type="file" accept=".jsonl" style="display:none" onchange="loadRubrics(event)">
+      </label>
+      <span class="file-st" id="rubrics-st">not loaded</span>
+    </div>`;
+}
+
+// ── File loading (manual file-picker mode) ─────────────────────────────────────
 
 function parseJsonl(text) {
   return text.trim().split('\n').filter(Boolean).map(l => {
@@ -314,8 +371,7 @@ function loadTraces(e) {
   reader.onload = ev => {
     traces = parseJsonl(ev.target.result);
     const el = document.getElementById('traces-st');
-    el.textContent = `${traces.length} trace${traces.length !== 1 ? 's' : ''}`;
-    el.className = 'file-st ok';
+    if (el) { el.textContent = `${traces.length} trace${traces.length !== 1 ? 's' : ''}`; el.className = 'file-st ok'; }
     renderList();
   };
   reader.readAsText(file);
@@ -326,39 +382,9 @@ function loadRubrics(e) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
-    // Handle duplicate trace_ids (append-only gen_rubrics may create them):
-    // - Prefer source="human" rubrics from any record
-    // - Take source="user_comment" rubrics only from the latest record
-    const byTrace = new Map(); // trace_id → { humanRubrics[], latestLlm[] }
-
-    for (const entry of parseJsonl(ev.target.result)) {
-      if (!entry.trace_id) continue;
-      const rubrics = entry.rubrics || [];
-      const human = rubrics.filter(r => r.source === 'human');
-      const llm = rubrics.filter(r => r.source !== 'human');
-
-      if (!byTrace.has(entry.trace_id)) {
-        byTrace.set(entry.trace_id, { human: [], llm });
-      }
-      // Merge human rubrics by id (deduplicate)
-      const existing = byTrace.get(entry.trace_id);
-      for (const r of human) {
-        if (!existing.human.find(x => x.id === r.id)) existing.human.push(r);
-      }
-      // Always overwrite llm with latest record's llm rubrics
-      existing.llm = llm;
-    }
-
-    savedRubrics = new Map();
-    for (const [tid, { human, llm }] of byTrace) {
-      savedRubrics.set(tid, [...human, ...llm]);
-    }
-    editedRubrics.clear();
-
+    initRubricsFromEntries(parseJsonl(ev.target.result));
     const el = document.getElementById('rubrics-st');
-    el.textContent = `${savedRubrics.size} trace${savedRubrics.size !== 1 ? 's' : ''} with rubrics`;
-    el.className = 'file-st ok';
-    updateUnsavedBadge();
+    if (el) { el.textContent = `${savedRubrics.size} trace${savedRubrics.size !== 1 ? 's' : ''} with rubrics`; el.className = 'file-st ok'; }
     renderList();
     if (selectedId) renderDetail(selectedId);
   };
@@ -366,6 +392,34 @@ function loadRubrics(e) {
 }
 
 // ── Rubric helpers ─────────────────────────────────────────────────────────────
+
+function initRubricsFromEntries(entries) {
+  // Handle duplicate trace_ids (append-only file): prefer human rubrics from any
+  // record, take LLM rubrics only from the latest record.
+  const byTrace = new Map();
+  for (const entry of entries) {
+    if (!entry.trace_id) continue;
+    const rubrics = entry.rubrics || [];
+    const human = rubrics.filter(r => r.source === 'human');
+    const llm = rubrics.filter(r => r.source !== 'human');
+
+    if (!byTrace.has(entry.trace_id)) {
+      byTrace.set(entry.trace_id, { human: [], llm });
+    }
+    const existing = byTrace.get(entry.trace_id);
+    for (const r of human) {
+      if (!existing.human.find(x => x.id === r.id)) existing.human.push(r);
+    }
+    existing.llm = llm; // always take latest LLM rubrics
+  }
+
+  savedRubrics = new Map();
+  for (const [tid, { human, llm }] of byTrace) {
+    savedRubrics.set(tid, [...human, ...llm]);
+  }
+  editedRubrics.clear();
+  updateUnsavedBadge();
+}
 
 function getRubrics(traceId) {
   return editedRubrics.has(traceId)
@@ -381,7 +435,6 @@ function nextId(rubrics) {
 }
 
 function markEdited(traceId, rubrics) {
-  // If identical to saved, remove from editedRubrics
   const saved = savedRubrics.get(traceId) || [];
   if (JSON.stringify(rubrics) === JSON.stringify(saved)) {
     editedRubrics.delete(traceId);
@@ -459,15 +512,14 @@ function renderDetail(traceId) {
   const isDirty = editedRubrics.has(traceId);
 
   const TABS = [
-    { id: 'response',     label: 'Response',     field: 'response' },
-    { id: 'article_text', label: 'Article',      field: 'article_text' },
-    { id: 'prompt',       label: 'Prompt',       field: 'prompt' },
+    { id: 'response',     label: 'Response',  field: 'response' },
+    { id: 'article_text', label: 'Article',   field: 'article_text' },
+    { id: 'prompt',       label: 'Prompt',    field: 'prompt' },
   ];
 
   const tabsHtml = TABS.map(tab => `
     <div class="tab${activeTab === tab.id ? ' active' : ''}" onclick="switchTab('${tab.id}')">
-      ${tab.label}
-      <span class="tab-len">${fmtLen(t[tab.field])}</span>
+      ${tab.label}<span class="tab-len">${fmtLen(t[tab.field])}</span>
     </div>`).join('');
 
   const panelsHtml = TABS.map(tab => `
@@ -475,7 +527,7 @@ function renderDetail(traceId) {
       <div class="text-block">${esc(t[tab.field] || '(empty)')}</div>
     </div>`).join('');
 
-  const rubricItems = rubrics.map((r, i) => `
+  const rubricItemsHtml = rubrics.map((r, i) => `
     <div class="rubric-item" id="ri-${i}">
       <span class="badge ${r.source === 'human' ? 'b-human' : 'b-llm'}" style="flex-shrink:0;margin-top:1px">
         ${r.source === 'human' ? '✏️ human' : '🤖 llm'}
@@ -509,7 +561,7 @@ function renderDetail(traceId) {
           </span>
         </div>
         <div id="rubric-list">
-          ${rubricItems || '<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">No rubrics yet.</div>'}
+          ${rubricItemsHtml || '<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">No rubrics yet.</div>'}
         </div>
         <button class="add-btn" onclick="addRubric('${traceId}')">＋ Add rubric</button>
       </div>
@@ -524,7 +576,13 @@ function editRubric(traceId, i) {
   const item = document.getElementById(`ri-${i}`);
   if (!item) return;
   item.classList.add('editing');
-  document.getElementById(`rs-${i}`).innerHTML = `
+  item.innerHTML = `
+    <div class="rubric-edit-top">
+      <span class="badge b-human">✏️ human</span>
+      <div class="rubric-actions">
+        <button class="icon-btn del" onclick="deleteRubric('${traceId}',${i})" title="Delete">✕</button>
+      </div>
+    </div>
     <textarea class="rubric-ta" id="ta-${i}">${esc(r.statement)}</textarea>
     <div class="edit-actions">
       <button class="btn btn-primary btn-sm" onclick="saveEdit('${traceId}',${i})">Save</button>
@@ -556,12 +614,17 @@ function addRubric(traceId) {
   markEdited(traceId, rubrics);
   renderDetail(traceId);
 
-  // Open textarea immediately for the new item
   const last = rubrics.length - 1;
   const item = document.getElementById(`ri-${last}`);
   if (!item) return;
   item.classList.add('editing');
-  document.getElementById(`rs-${last}`).innerHTML = `
+  item.innerHTML = `
+    <div class="rubric-edit-top">
+      <span class="badge b-human">✏️ human</span>
+      <div class="rubric-actions">
+        <button class="icon-btn del" onclick="cancelAdd('${traceId}',${last})" title="Cancel">✕</button>
+      </div>
+    </div>
     <textarea class="rubric-ta" id="ta-${last}"
       placeholder="A self-contained TRUE/FALSE statement evaluatable on this article's summary…"></textarea>
     <div class="edit-actions">
@@ -576,24 +639,27 @@ function addRubric(traceId) {
 function cancelAdd(traceId, i) {
   const rubrics = [...getRubrics(traceId)];
   rubrics.splice(i, 1);
-  markEdited(traceId, rubrics); // markEdited will auto-clean if back to saved state
+  markEdited(traceId, rubrics);
   renderDetail(traceId);
 }
 
 // ── Export ─────────────────────────────────────────────────────────────────────
 
 function exportRubrics() {
-  const hasPending = editedRubrics.size > 0;
-  const msg = hasPending
-    ? `Export will write a complete example_rubrics.jsonl with your changes applied.\n\nThis file REPLACES your existing example_rubrics.jsonl on disk.\nMake sure you loaded the latest version before editing.\n\nContinue?`
-    : `Export the current example_rubrics.jsonl (no unsaved changes).\n\nContinue?`;
+  const savePath = versionRelPath
+    ? `eval/data/${versionRelPath.split('/').pop()}/example_rubrics.jsonl`
+    : 'eval/data/<version>/example_rubrics.jsonl';
+
+  const msg = editedRubrics.size
+    ? `Export will write a complete example_rubrics.jsonl with your changes applied.\n\nThis file REPLACES the existing file on disk:\n  ${savePath}\n\nMake sure you loaded the latest version before editing.\n\nContinue?`
+    : `Export the current example_rubrics.jsonl (no unsaved changes).\n\nSave it to: ${savePath}\n\nContinue?`;
+
   if (!confirm(msg)) return;
 
-  // Merge pending changes over saved state
   const merged = new Map(savedRubrics);
   for (const [tid, rubrics] of editedRubrics) {
     if (rubrics.length > 0) merged.set(tid, rubrics);
-    else merged.delete(tid); // all rubrics deleted → omit trace from file
+    else merged.delete(tid);
   }
 
   const lines = [];
@@ -610,7 +676,6 @@ function exportRubrics() {
   a.click();
   URL.revokeObjectURL(a.href);
 
-  // Commit edits to saved state
   for (const [tid, rubrics] of editedRubrics) {
     if (rubrics.length > 0) savedRubrics.set(tid, rubrics);
     else savedRubrics.delete(tid);
@@ -628,13 +693,11 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-
 function toStr(v) {
   if (v === null || v === undefined) return '';
   const s = String(v);
   return s === 'null' ? '' : s;
 }
-
 function fmtLen(s) {
   if (!s) return '';
   return s.length < 1000 ? `${s.length}c` : `${(s.length / 1000).toFixed(1)}k`;
