@@ -85,6 +85,6 @@ make eval-rate PROMPT=eval/prompts/v1_baseline.txt  # Score a candidate prompt
 - **Principle-based** (`rubrics.json`): global, applied to every example, shows per-rubric pass rate
 - **Example-specific** (`example_rubrics.jsonl`): per-trace, derived from user comments, keyed by `trace_id`
 
-**Eval scripts use `gemini-2.0-flash`** (not `gemini-2.5-flash-preview`) — independent from the bot's production model.
+**Eval scripts use `gemini-3-flash-preview`** — same model as the production bot.
 
 **Gitignored:** `eval/data/traces.jsonl` and `eval/data/results/` (contain scraped article content). **Committed:** `eval/data/rubrics.json` and `eval/data/example_rubrics.jsonl`.

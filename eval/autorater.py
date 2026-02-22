@@ -59,7 +59,7 @@ def call_gemini(client, prompt: str, json_output: bool = False) -> str:
         config_kwargs["response_mime_type"] = "application/json"
 
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-3-flash-preview",
         contents=prompt,
         config=types.GenerateContentConfig(**config_kwargs),
     )

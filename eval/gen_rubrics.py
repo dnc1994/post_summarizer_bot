@@ -70,7 +70,7 @@ def call_gemini_json(client, prompt: str) -> list | dict:
     from google.genai import types
 
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-3-flash-preview",
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
