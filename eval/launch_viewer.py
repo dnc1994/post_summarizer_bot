@@ -48,11 +48,15 @@ def build_html(viewer_template: Path, preloaded: dict) -> str:
     return html.replace("<!-- __PRELOADED__ -->", injection)
 
 
-def make_handler(html: str, save_path: Path):
+def make_handler(viewer_template: Path, preloaded_base: dict, save_path: Path):
     class ViewerHandler(BaseHTTPRequestHandler):
         def do_GET(self):
             if self.path in ("/", "/viewer.html"):
-                body = html.encode("utf-8")
+                # Re-read rubrics from disk on every request so a refresh
+                # always reflects the latest saved state.
+                rubrics = load_jsonl(save_path)
+                preloaded = {**preloaded_base, "exampleRubrics": rubrics}
+                body = build_html(viewer_template, preloaded).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
@@ -116,16 +120,15 @@ def main():
     rubrics = load_jsonl(rubrics_file)
     port = args.port or find_free_port()
 
-    preloaded = {
+    preloaded_base = {
         "version": args.version,
         "relPath": f"eval/data/{args.version}",
         "serverMode": True,
         "traces": traces,
-        "exampleRubrics": rubrics,
+        # exampleRubrics is excluded here — added fresh per request
     }
 
-    html = build_html(viewer_template, preloaded)
-    handler = make_handler(html, rubrics_file)
+    handler = make_handler(viewer_template, preloaded_base, rubrics_file)
     server = HTTPServer(("127.0.0.1", port), handler)
     url = f"http://127.0.0.1:{port}/"
 

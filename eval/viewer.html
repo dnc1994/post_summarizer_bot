@@ -202,6 +202,28 @@ body {
   padding: 11px 13px;
 }
 
+.rendered-block {
+  font-size: 13.5px;
+  line-height: 1.7;
+  word-break: break-word;
+  white-space: pre-wrap;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 13px 15px;
+  max-width: 540px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.rendered-block b  { font-weight: 700; }
+.rendered-block i  { font-style: italic; }
+.rendered-block u  { text-decoration: underline; }
+.rendered-block s  { text-decoration: line-through; }
+.rendered-block a  { color: var(--accent); text-decoration: none; }
+.rendered-block a:hover { text-decoration: underline; }
+.rendered-block code { font-family: monospace; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+.rendered-block pre  { background: #f1f5f9; border-radius: 6px; padding: 10px 12px; overflow-x: auto; font-size: 12px; line-height: 1.6; }
+.rendered-block blockquote { border-left: 3px solid #cbd5e1; margin: 6px 0; padding-left: 10px; color: var(--muted); }
+
 /* ── Rubrics ─────────────────────────────────────────────────────────────── */
 .rubrics-panel { padding: 12px 15px 16px; border-top: 1px solid var(--border); }
 .rubrics-hd { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
@@ -309,7 +331,7 @@ let traces = [];
 let savedRubrics = new Map();  // trace_id → rubric[]  (from loaded file, merged)
 let editedRubrics = new Map(); // trace_id → rubric[]  (unsaved edits)
 let selectedId = null;
-let activeTab = 'response';
+let activeTab = 'rendered';
 let versionRelPath = null;     // e.g. "eval/data/v1" — set when pre-loaded
 
 // ── Startup ────────────────────────────────────────────────────────────────────
@@ -331,7 +353,7 @@ function initPreloaded(data) {
   controls.innerHTML = `
     <span class="version-pill">${data.version}</span>
     <span class="file-st ok" style="font-size:11px">
-      ${traces.length} traces · ${savedRubrics.size} with rubrics · auto-loaded from ${data.relPath}/
+      ${traces.length} traces · <span id="header-rubric-count"></span> · auto-loaded from ${data.relPath}/
     </span>`;
 
   renderList();
@@ -467,6 +489,12 @@ function renderList() {
     ? `${traces.length} trace${traces.length !== 1 ? 's' : ''} · ${totalRubrics} rubric${totalRubrics !== 1 ? 's' : ''}`
     : 'No traces loaded';
 
+  const headerCount = document.getElementById('header-rubric-count');
+  if (headerCount) {
+    const withRubrics = traces.filter(t => getRubrics(t.trace_id).length > 0).length;
+    headerCount.textContent = `${withRubrics} with rubrics · ${totalRubrics} total`;
+  }
+
   const el = document.getElementById('trace-list');
   if (!traces.length) {
     el.innerHTML = '<div style="padding:22px;text-align:center;color:#94a3b8;font-size:12px">No traces loaded</div>';
@@ -523,6 +551,7 @@ function renderDetail(traceId) {
   const isDirty = editedRubrics.has(traceId);
 
   const TABS = [
+    { id: 'rendered',     label: 'Preview',   field: 'response',      render: true },
     { id: 'response',     label: 'Response',  field: 'response' },
     { id: 'article_text', label: 'Article',   field: 'article_text' },
     { id: 'prompt',       label: 'Prompt',    field: 'prompt' },
@@ -530,13 +559,16 @@ function renderDetail(traceId) {
 
   const tabsHtml = TABS.map(tab => `
     <div class="tab${activeTab === tab.id ? ' active' : ''}" onclick="switchTab('${tab.id}')">
-      ${tab.label}<span class="tab-len">${fmtLen(t[tab.field])}</span>
+      ${tab.label}${tab.render ? '' : `<span class="tab-len">${fmtLen(t[tab.field])}</span>`}
     </div>`).join('');
 
-  const panelsHtml = TABS.map(tab => `
-    <div class="tab-panel${activeTab === tab.id ? ' active' : ''}">
-      <div class="text-block">${esc(t[tab.field] || '(empty)')}</div>
-    </div>`).join('');
+  const panelsHtml = TABS.map(tab => {
+    const content = t[tab.field] || '';
+    const inner = tab.render
+      ? `<div class="rendered-block">${content || '<span style="color:#94a3b8">(empty)</span>'}</div>`
+      : `<div class="text-block">${esc(content || '(empty)')}</div>`;
+    return `<div class="tab-panel${activeTab === tab.id ? ' active' : ''}">${inner}</div>`;
+  }).join('');
 
   const rubricItemsHtml = rubrics.map((r, i) => `
     <div class="rubric-item" id="ri-${i}">
@@ -766,6 +798,15 @@ function fmtLen(s) {
   if (!s) return '';
   return s.length < 1000 ? `${s.length}c` : `${(s.length / 1000).toFixed(1)}k`;
 }
+
+// ── Unsaved changes guard ───────────────────────────────────────────────────────
+
+window.addEventListener('beforeunload', e => {
+  if (editedRubrics.size > 0) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
 </script>
 </body>
 </html>
