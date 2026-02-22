@@ -645,17 +645,7 @@ function cancelAdd(traceId, i) {
 
 // ── Export ─────────────────────────────────────────────────────────────────────
 
-function exportRubrics() {
-  const savePath = versionRelPath
-    ? `eval/data/${versionRelPath.split('/').pop()}/example_rubrics.jsonl`
-    : 'eval/data/<version>/example_rubrics.jsonl';
-
-  const msg = editedRubrics.size
-    ? `Export will write a complete example_rubrics.jsonl with your changes applied.\n\nThis file REPLACES the existing file on disk:\n  ${savePath}\n\nMake sure you loaded the latest version before editing.\n\nContinue?`
-    : `Export the current example_rubrics.jsonl (no unsaved changes).\n\nSave it to: ${savePath}\n\nContinue?`;
-
-  if (!confirm(msg)) return;
-
+async function exportRubrics() {
   const merged = new Map(savedRubrics);
   for (const [tid, rubrics] of editedRubrics) {
     if (rubrics.length > 0) merged.set(tid, rubrics);
@@ -666,16 +656,67 @@ function exportRubrics() {
   for (const [traceId, rubrics] of merged) {
     lines.push(JSON.stringify({ trace_id: traceId, rubrics }));
   }
-
   if (!lines.length) { alert('No rubrics to export.'); return; }
+  const content = lines.join('\n') + '\n';
 
-  const blob = new Blob([lines.join('\n') + '\n'], { type: 'application/x-ndjson' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'example_rubrics.jsonl';
-  a.click();
-  URL.revokeObjectURL(a.href);
+  if (window.PRELOADED?.serverMode) {
+    // ── Server mode: POST directly to disk ──────────────────────────────────
+    const savePath = `${versionRelPath}/example_rubrics.jsonl`;
+    if (!confirm(`Save to:\n  ${savePath}\n\nThis overwrites the existing file. Continue?`)) return;
+    try {
+      const resp = await fetch('/save', {
+        method: 'POST',
+        body: content,
+        headers: { 'Content-Type': 'application/x-ndjson' },
+      });
+      const result = await resp.json();
+      if (result.ok) {
+        commitEdits();
+        showSaveNotification('Saved to disk ✓');
+      } else {
+        alert(`Save failed: ${result.error}`);
+      }
+    } catch (e) {
+      alert(`Save failed: ${e}`);
+    }
+  } else {
+    // ── Manual mode: save via File System Access API or browser download ─────
+    const savePath = versionRelPath
+      ? `${versionRelPath}/example_rubrics.jsonl`
+      : 'eval/data/<version>/example_rubrics.jsonl';
 
+    if (typeof showSaveFilePicker !== 'undefined') {
+      // Modern browsers (Chrome/Edge): native save dialog
+      try {
+        const handle = await showSaveFilePicker({
+          suggestedName: 'example_rubrics.jsonl',
+          types: [{ description: 'JSONL', accept: { 'application/x-ndjson': ['.jsonl'] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(content);
+        await writable.close();
+        commitEdits();
+        showSaveNotification('Saved ✓');
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return; // user cancelled dialog
+        // fall through to download
+      }
+    }
+
+    // Fallback: browser download
+    if (!confirm(`Download example_rubrics.jsonl.\n\nAfter downloading, move the file to:\n  ${savePath}\n\nContinue?`)) return;
+    const blob = new Blob([content], { type: 'application/x-ndjson' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'example_rubrics.jsonl';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    commitEdits();
+  }
+}
+
+function commitEdits() {
   for (const [tid, rubrics] of editedRubrics) {
     if (rubrics.length > 0) savedRubrics.set(tid, rubrics);
     else savedRubrics.delete(tid);
@@ -684,6 +725,18 @@ function exportRubrics() {
   updateUnsavedBadge();
   renderList();
   if (selectedId) renderDetail(selectedId);
+}
+
+function showSaveNotification(msg) {
+  const badge = document.getElementById('unsaved-badge');
+  badge.textContent = msg;
+  badge.className = 'badge b-pass';
+  badge.style.display = 'inline-flex';
+  setTimeout(() => {
+    badge.style.display = editedRubrics.size ? 'inline-flex' : 'none';
+    badge.textContent = '● unsaved changes';
+    badge.className = 'badge b-warn';
+  }, 3000);
 }
 
 // ── Utils ──────────────────────────────────────────────────────────────────────
