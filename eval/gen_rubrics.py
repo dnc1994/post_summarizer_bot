@@ -50,19 +50,27 @@ def load_traces() -> list[dict]:
     return records
 
 
-def load_existing_example_rubric_ids() -> set[str]:
+def load_processed_comments() -> dict[str, str | None]:
+    """Return {trace_id: generated_from_comment} for entries already in example_rubrics.jsonl.
+
+    When duplicate trace_ids exist (append-only re-generation), keeps the latest entry.
+    A None value means the entry predates the generated_from_comment field.
+    """
     if not EXAMPLE_RUBRICS_FILE.exists():
-        return set()
-    ids = set()
+        return {}
+    result: dict[str, str | None] = {}
     with open(EXAMPLE_RUBRICS_FILE) as f:
         for line in f:
             line = line.strip()
             if line:
                 try:
-                    ids.add(json.loads(line)["trace_id"])
+                    entry = json.loads(line)
+                    tid = entry.get("trace_id")
+                    if tid:
+                        result[tid] = entry.get("generated_from_comment")  # None if absent
                 except (json.JSONDecodeError, KeyError):
                     pass
-    return ids
+    return result
 
 
 def call_gemini_json(client, prompt: str) -> list | dict:
@@ -190,12 +198,16 @@ def main():
         print("Review and edit rubrics.json before running autorater.")
 
     # ── Example-specific rubrics ─────────────────────────────────────────────
-    existing_ids = load_existing_example_rubric_ids()
+    processed = load_processed_comments()
     candidates = [
         t for t in traces
-        if t.get("user_comment") and t.get("response") and t["trace_id"] not in existing_ids
+        if t.get("user_comment") and t.get("response")
+        and (
+            t["trace_id"] not in processed                          # never processed
+            or processed[t["trace_id"]] != str(t["user_comment"])  # new/changed comment
+        )
     ]
-    print(f"\nTraces with new user comments: {len(candidates)}")
+    print(f"\nTraces with new or updated user comments: {len(candidates)}")
 
     new_entries = 0
     with open(EXAMPLE_RUBRICS_FILE, "a") as f:
@@ -203,7 +215,11 @@ def main():
             print(f"  Generating example rubrics for trace {trace['trace_id']}...")
             try:
                 rubrics = generate_example_rubrics(client, trace)
-                entry = {"trace_id": trace["trace_id"], "rubrics": rubrics}
+                entry = {
+                    "trace_id": trace["trace_id"],
+                    "generated_from_comment": str(trace["user_comment"]),
+                    "rubrics": rubrics,
+                }
                 f.write(json.dumps(entry) + "\n")
                 new_entries += 1
             except Exception as e:

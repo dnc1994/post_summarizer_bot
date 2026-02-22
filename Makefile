@@ -1,4 +1,4 @@
-.PHONY: eval-dump eval-rubrics eval-rate eval-view eval-show
+.PHONY: eval-dump eval-rubrics eval-rate eval-view eval-show eval-viewer
 
 eval-dump:
 	uv run python eval/dump_traces.py
@@ -16,3 +16,6 @@ eval-view:
 eval-show:
 	@test -n "$(TRACE)" || (echo "Error: Usage: make eval-show TRACE=<trace-id-prefix>" && exit 1)
 	uv run python eval/view_traces.py --trace-id $(TRACE)
+
+eval-viewer:
+	open eval/viewer.html

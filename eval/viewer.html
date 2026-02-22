@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Eval Viewer</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --muted: #64748b;
+  --subtle: #94a3b8;
+  --accent: #3b82f6;
+  --accent-bg: #eff6ff;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.header {
+  background: #1e293b;
+  color: #f1f5f9;
+  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.header h1 { font-size: 14px; font-weight: 600; flex: 1; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.btn-ghost { background: rgba(255,255,255,0.12); color: #f1f5f9; }
+.btn-ghost:hover { background: rgba(255,255,255,0.2); }
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: #2563eb; }
+.btn-sm { padding: 2px 7px; font-size: 11px; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-outline:hover { background: var(--bg); }
+
+.file-row { display: flex; align-items: center; gap: 5px; }
+.file-st { font-size: 11px; color: #64748b; }
+.file-st.ok { color: #4ade80; }
+
+/* ── Badges ──────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.b-pass { background: #dcfce7; color: #15803d; }
+.b-fail { background: #fee2e2; color: #dc2626; }
+.b-none { background: #f1f5f9; color: var(--muted); }
+.b-human { background: #dbeafe; color: #1d4ed8; }
+.b-llm { background: #ede9fe; color: #6d28d9; }
+.b-warn { background: #fef3c7; color: #b45309; }
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.sidebar {
+  width: 290px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+.sidebar-hd {
+  padding: 6px 11px;
+  font-size: 11px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.trace-list { flex: 1; overflow-y: auto; }
+
+.trace-item {
+  padding: 8px 11px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+}
+.trace-item:hover { background: #f8fafc; }
+.trace-item.active {
+  background: var(--accent-bg);
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+}
+.ti-top { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
+.ti-tid { font-family: monospace; font-size: 11px; color: var(--muted); }
+.ti-url {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ti-comment {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Detail ──────────────────────────────────────────────────────────────── */
+.detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+}
+.empty-st {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--subtle);
+  font-size: 13px;
+}
+
+.detail-hd {
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+.detail-url { font-size: 14px; font-weight: 600; margin-bottom: 4px; word-break: break-all; }
+.detail-sub { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 11px; color: var(--muted); }
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+  padding: 0 15px;
+}
+.tab {
+  padding: 7px 11px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+.tab:hover:not(.active) { color: var(--text); }
+.tab-len { font-size: 10px; color: var(--subtle); margin-left: 3px; }
+
+.detail-body { flex: 1; overflow-y: auto; }
+.tab-panel { display: none; padding: 14px 15px; }
+.tab-panel.active { display: block; }
+
+.text-block {
+  font-size: 12.5px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 11px 13px;
+}
+
+/* ── Rubrics ─────────────────────────────────────────────────────────────── */
+.rubrics-panel { padding: 12px 15px 16px; border-top: 1px solid var(--border); }
+.rubrics-hd { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
+.rubrics-title { font-size: 12px; font-weight: 600; color: var(--text); }
+
+.rubric-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  margin-bottom: 5px;
+  background: var(--surface);
+}
+.rubric-item.editing { border-color: #f59e0b; background: #fffbeb; }
+.rubric-stmt { flex: 1; font-size: 12.5px; line-height: 1.5; padding-top: 1px; }
+.rubric-ta {
+  flex: 1;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 4px 7px;
+  resize: vertical;
+  min-height: 52px;
+  font-family: inherit;
+  background: white;
+}
+.rubric-ta:focus { outline: none; border-color: var(--accent); }
+.rubric-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--subtle);
+  line-height: 1.2;
+}
+.icon-btn:hover { background: var(--bg); color: var(--text); }
+.icon-btn.del:hover { background: #fee2e2; color: #dc2626; }
+.edit-actions { display: flex; gap: 5px; margin-top: 5px; }
+
+.add-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 5px 9px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.add-btn:hover { background: var(--bg); color: var(--text); border-color: var(--subtle); }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <h1>Eval Viewer</h1>
+  <div class="file-row">
+    <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+      Load traces.jsonl
+      <input type="file" accept=".jsonl" style="display:none" onchange="loadTraces(event)">
+    </label>
+    <span class="file-st" id="traces-st">not loaded</span>
+  </div>
+  <div class="file-row">
+    <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+      Load example_rubrics.jsonl
+      <input type="file" accept=".jsonl" style="display:none" onchange="loadRubrics(event)">
+    </label>
+    <span class="file-st" id="rubrics-st">not loaded</span>
+  </div>
+  <span id="unsaved-badge" class="badge b-warn" style="display:none">● unsaved changes</span>
+  <button class="btn btn-primary btn-sm" onclick="exportRubrics()">⬇ Export example_rubrics.jsonl</button>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-hd" id="sidebar-hd">No traces loaded</div>
+    <div class="trace-list" id="trace-list">
+      <div style="padding:22px;text-align:center;color:#94a3b8;font-size:12px">
+        Load traces.jsonl to begin
+      </div>
+    </div>
+  </div>
+  <div class="detail" id="detail">
+    <div class="empty-st">Select a trace to view details</div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+
+let traces = [];
+let savedRubrics = new Map();  // trace_id → rubric[]  (from loaded file, merged)
+let editedRubrics = new Map(); // trace_id → rubric[]  (unsaved edits)
+let selectedId = null;
+let activeTab = 'response';
+
+// ── File loading ───────────────────────────────────────────────────────────────
+
+function parseJsonl(text) {
+  return text.trim().split('\n').filter(Boolean).map(l => {
+    try { return JSON.parse(l); } catch { return null; }
+  }).filter(Boolean);
+}
+
+function loadTraces(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    traces = parseJsonl(ev.target.result);
+    const el = document.getElementById('traces-st');
+    el.textContent = `${traces.length} trace${traces.length !== 1 ? 's' : ''}`;
+    el.className = 'file-st ok';
+    renderList();
+  };
+  reader.readAsText(file);
+}
+
+function loadRubrics(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    // Handle duplicate trace_ids (append-only gen_rubrics may create them):
+    // - Prefer source="human" rubrics from any record
+    // - Take source="user_comment" rubrics only from the latest record
+    const byTrace = new Map(); // trace_id → { humanRubrics[], latestLlm[] }
+
+    for (const entry of parseJsonl(ev.target.result)) {
+      if (!entry.trace_id) continue;
+      const rubrics = entry.rubrics || [];
+      const human = rubrics.filter(r => r.source === 'human');
+      const llm = rubrics.filter(r => r.source !== 'human');
+
+      if (!byTrace.has(entry.trace_id)) {
+        byTrace.set(entry.trace_id, { human: [], llm });
+      }
+      // Merge human rubrics by id (deduplicate)
+      const existing = byTrace.get(entry.trace_id);
+      for (const r of human) {
+        if (!existing.human.find(x => x.id === r.id)) existing.human.push(r);
+      }
+      // Always overwrite llm with latest record's llm rubrics
+      existing.llm = llm;
+    }
+
+    savedRubrics = new Map();
+    for (const [tid, { human, llm }] of byTrace) {
+      savedRubrics.set(tid, [...human, ...llm]);
+    }
+    editedRubrics.clear();
+
+    const el = document.getElementById('rubrics-st');
+    el.textContent = `${savedRubrics.size} trace${savedRubrics.size !== 1 ? 's' : ''} with rubrics`;
+    el.className = 'file-st ok';
+    updateUnsavedBadge();
+    renderList();
+    if (selectedId) renderDetail(selectedId);
+  };
+  reader.readAsText(file);
+}
+
+// ── Rubric helpers ─────────────────────────────────────────────────────────────
+
+function getRubrics(traceId) {
+  return editedRubrics.has(traceId)
+    ? editedRubrics.get(traceId)
+    : (savedRubrics.get(traceId) || []);
+}
+
+function nextId(rubrics) {
+  const nums = rubrics
+    .map(r => parseInt((r.id || '').replace(/\D/g, '') || '0'))
+    .filter(n => !isNaN(n) && n > 0);
+  return `er${nums.length ? Math.max(...nums) + 1 : 1}`;
+}
+
+function markEdited(traceId, rubrics) {
+  // If identical to saved, remove from editedRubrics
+  const saved = savedRubrics.get(traceId) || [];
+  if (JSON.stringify(rubrics) === JSON.stringify(saved)) {
+    editedRubrics.delete(traceId);
+  } else {
+    editedRubrics.set(traceId, rubrics);
+  }
+  updateUnsavedBadge();
+  renderList();
+}
+
+function updateUnsavedBadge() {
+  document.getElementById('unsaved-badge').style.display =
+    editedRubrics.size ? 'inline-flex' : 'none';
+}
+
+// ── List ───────────────────────────────────────────────────────────────────────
+
+function renderList() {
+  document.getElementById('sidebar-hd').textContent =
+    traces.length ? `${traces.length} trace${traces.length !== 1 ? 's' : ''}` : 'No traces loaded';
+
+  const el = document.getElementById('trace-list');
+  if (!traces.length) {
+    el.innerHTML = '<div style="padding:22px;text-align:center;color:#94a3b8;font-size:12px">No traces loaded</div>';
+    return;
+  }
+
+  el.innerHTML = traces.map(t => {
+    const isActive = t.trace_id === selectedId;
+    const isDirty = editedRubrics.has(t.trace_id);
+    const rubrics = getRubrics(t.trace_id);
+    const url = (t.url || '').replace(/^https?:\/\//, '');
+    const comment = toStr(t.user_comment);
+
+    return `<div class="trace-item${isActive ? ' active' : ''}" onclick="select('${t.trace_id}')">
+      <div class="ti-top">
+        <span class="ti-tid">${t.trace_id.slice(0, 8)}</span>
+        ${ratingBadge(t.user_rating)}
+        ${rubrics.length ? `<span style="font-size:10px;color:#94a3b8">${rubrics.length}r</span>` : ''}
+        ${isDirty ? '<span class="badge b-warn" style="font-size:9px">●</span>' : ''}
+      </div>
+      <div class="ti-url">${esc(url) || '<span style="color:#94a3b8">no url</span>'}</div>
+      ${comment ? `<div class="ti-comment">💬 ${esc(comment.slice(0, 65))}${comment.length > 65 ? '…' : ''}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function ratingBadge(val) {
+  if (val === null || val === undefined) return '<span class="badge b-none">—</span>';
+  return (val === 1 || val === 1.0 || val === true)
+    ? '<span class="badge b-pass">👍</span>'
+    : '<span class="badge b-fail">👎</span>';
+}
+
+// ── Detail ─────────────────────────────────────────────────────────────────────
+
+function select(traceId) {
+  selectedId = traceId;
+  renderList();
+  renderDetail(traceId);
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  if (selectedId) renderDetail(selectedId);
+}
+
+function renderDetail(traceId) {
+  const t = traces.find(x => x.trace_id === traceId);
+  if (!t) return;
+
+  const ts = t.timestamp ? new Date(t.timestamp).toLocaleString() : '—';
+  const comment = toStr(t.user_comment) || '—';
+  const rubrics = getRubrics(traceId);
+  const isDirty = editedRubrics.has(traceId);
+
+  const TABS = [
+    { id: 'response',     label: 'Response',     field: 'response' },
+    { id: 'article_text', label: 'Article',      field: 'article_text' },
+    { id: 'prompt',       label: 'Prompt',       field: 'prompt' },
+  ];
+
+  const tabsHtml = TABS.map(tab => `
+    <div class="tab${activeTab === tab.id ? ' active' : ''}" onclick="switchTab('${tab.id}')">
+      ${tab.label}
+      <span class="tab-len">${fmtLen(t[tab.field])}</span>
+    </div>`).join('');
+
+  const panelsHtml = TABS.map(tab => `
+    <div class="tab-panel${activeTab === tab.id ? ' active' : ''}">
+      <div class="text-block">${esc(t[tab.field] || '(empty)')}</div>
+    </div>`).join('');
+
+  const rubricItems = rubrics.map((r, i) => `
+    <div class="rubric-item" id="ri-${i}">
+      <span class="badge ${r.source === 'human' ? 'b-human' : 'b-llm'}" style="flex-shrink:0;margin-top:1px">
+        ${r.source === 'human' ? '✏️ human' : '🤖 llm'}
+      </span>
+      <span class="rubric-stmt" id="rs-${i}">${esc(r.statement)}</span>
+      <div class="rubric-actions">
+        <button class="icon-btn" onclick="editRubric('${traceId}',${i})" title="Edit">✎</button>
+        <button class="icon-btn del" onclick="deleteRubric('${traceId}',${i})" title="Delete">✕</button>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-hd">
+      <div class="detail-url">${esc(t.url || '(no url)')}</div>
+      <div class="detail-sub">
+        <span style="font-family:monospace;font-size:10px">${traceId}</span>
+        ${ratingBadge(t.user_rating)}
+        <span>🕐 ${ts}</span>
+        <span>💬 ${esc(comment)}</span>
+      </div>
+    </div>
+    <div class="tabs">${tabsHtml}</div>
+    <div class="detail-body">
+      ${panelsHtml}
+      <div class="rubrics-panel" id="rubrics-panel">
+        <div class="rubrics-hd">
+          <span class="rubrics-title">Example-Specific Rubrics</span>
+          ${isDirty ? '<span class="badge b-warn">unsaved</span>' : ''}
+          <span style="font-size:10px;color:#94a3b8;margin-left:auto">
+            ${rubrics.length} rubric${rubrics.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <div id="rubric-list">
+          ${rubricItems || '<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">No rubrics yet.</div>'}
+        </div>
+        <button class="add-btn" onclick="addRubric('${traceId}')">＋ Add rubric</button>
+      </div>
+    </div>
+  `;
+}
+
+// ── Rubric editing ─────────────────────────────────────────────────────────────
+
+function editRubric(traceId, i) {
+  const r = getRubrics(traceId)[i];
+  const item = document.getElementById(`ri-${i}`);
+  if (!item) return;
+  item.classList.add('editing');
+  document.getElementById(`rs-${i}`).innerHTML = `
+    <textarea class="rubric-ta" id="ta-${i}">${esc(r.statement)}</textarea>
+    <div class="edit-actions">
+      <button class="btn btn-primary btn-sm" onclick="saveEdit('${traceId}',${i})">Save</button>
+      <button class="btn btn-outline btn-sm" onclick="renderDetail('${traceId}')">Cancel</button>
+    </div>`;
+  document.getElementById(`ta-${i}`).focus();
+}
+
+function saveEdit(traceId, i) {
+  const text = (document.getElementById(`ta-${i}`)?.value || '').trim();
+  if (!text) return;
+  const rubrics = [...getRubrics(traceId)];
+  rubrics[i] = { ...rubrics[i], statement: text, source: 'human' };
+  markEdited(traceId, rubrics);
+  renderDetail(traceId);
+}
+
+function deleteRubric(traceId, i) {
+  if (!confirm('Delete this rubric?')) return;
+  const rubrics = [...getRubrics(traceId)];
+  rubrics.splice(i, 1);
+  markEdited(traceId, rubrics);
+  renderDetail(traceId);
+}
+
+function addRubric(traceId) {
+  const rubrics = [...getRubrics(traceId)];
+  rubrics.push({ id: nextId(rubrics), statement: '', source: 'human' });
+  markEdited(traceId, rubrics);
+  renderDetail(traceId);
+
+  // Open textarea immediately for the new item
+  const last = rubrics.length - 1;
+  const item = document.getElementById(`ri-${last}`);
+  if (!item) return;
+  item.classList.add('editing');
+  document.getElementById(`rs-${last}`).innerHTML = `
+    <textarea class="rubric-ta" id="ta-${last}"
+      placeholder="A self-contained TRUE/FALSE statement evaluatable on this article's summary…"></textarea>
+    <div class="edit-actions">
+      <button class="btn btn-primary btn-sm" onclick="saveEdit('${traceId}',${last})">Save</button>
+      <button class="btn btn-outline btn-sm" onclick="cancelAdd('${traceId}',${last})">Cancel</button>
+    </div>`;
+  document.getElementById(`ta-${last}`).focus();
+  setTimeout(() => document.getElementById('rubrics-panel')
+    ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 30);
+}
+
+function cancelAdd(traceId, i) {
+  const rubrics = [...getRubrics(traceId)];
+  rubrics.splice(i, 1);
+  markEdited(traceId, rubrics); // markEdited will auto-clean if back to saved state
+  renderDetail(traceId);
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────────
+
+function exportRubrics() {
+  const hasPending = editedRubrics.size > 0;
+  const msg = hasPending
+    ? `Export will write a complete example_rubrics.jsonl with your changes applied.\n\nThis file REPLACES your existing example_rubrics.jsonl on disk.\nMake sure you loaded the latest version before editing.\n\nContinue?`
+    : `Export the current example_rubrics.jsonl (no unsaved changes).\n\nContinue?`;
+  if (!confirm(msg)) return;
+
+  // Merge pending changes over saved state
+  const merged = new Map(savedRubrics);
+  for (const [tid, rubrics] of editedRubrics) {
+    if (rubrics.length > 0) merged.set(tid, rubrics);
+    else merged.delete(tid); // all rubrics deleted → omit trace from file
+  }
+
+  const lines = [];
+  for (const [traceId, rubrics] of merged) {
+    lines.push(JSON.stringify({ trace_id: traceId, rubrics }));
+  }
+
+  if (!lines.length) { alert('No rubrics to export.'); return; }
+
+  const blob = new Blob([lines.join('\n') + '\n'], { type: 'application/x-ndjson' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'example_rubrics.jsonl';
+  a.click();
+  URL.revokeObjectURL(a.href);
+
+  // Commit edits to saved state
+  for (const [tid, rubrics] of editedRubrics) {
+    if (rubrics.length > 0) savedRubrics.set(tid, rubrics);
+    else savedRubrics.delete(tid);
+  }
+  editedRubrics.clear();
+  updateUnsavedBadge();
+  renderList();
+  if (selectedId) renderDetail(selectedId);
+}
+
+// ── Utils ──────────────────────────────────────────────────────────────────────
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function toStr(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  return s === 'null' ? '' : s;
+}
+
+function fmtLen(s) {
+  if (!s) return '';
+  return s.length < 1000 ? `${s.length}c` : `${(s.length / 1000).toFixed(1)}k`;
+}
+</script>
+</body>
+</html>
