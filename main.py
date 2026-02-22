@@ -6,6 +6,7 @@ import trafilatura
 from google import genai
 from langfuse import Langfuse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import Conflict
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CallbackQueryHandler, CommandHandler, filters
 from dotenv import load_dotenv
 
@@ -303,6 +304,16 @@ async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Catch-all logger to see what's coming in."""
     logger.info(f"RAW UPDATE: {update.to_dict()}")
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Global error handler. Treats Conflict as a warning — it's expected during deployments."""
+    if isinstance(context.error, Conflict):
+        logger.warning(
+            "Conflict: another bot instance is polling. "
+            "This is normal during deployments — will retry until the old instance stops."
+        )
+    else:
+        logger.error("Unhandled exception:", exc_info=context.error)
+
 async def post_init(application) -> None:
     """Capture bot username at startup for use in deep-links."""
     global BOT_USERNAME
@@ -334,6 +345,7 @@ if __name__ == '__main__':
         logger.info("-------------------------")
         logger.info("Bot started. Polling for updates...")
 
-        application.run_polling()
+        application.add_error_handler(error_handler)
+        application.run_polling(drop_pending_updates=True)
     except ValueError:
         logger.error("CHANNEL_A_ID must be an integer (e.g., -100123456789)")
