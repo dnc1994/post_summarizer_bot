@@ -63,28 +63,39 @@ Offline hill-climbing loop for improving the prompt. No new dependencies — use
 
 ```
 eval/
-  dump_traces.py          # Script 1: Langfuse → JSONL dataset
-  gen_rubrics.py          # Script 2: Generate boolean rubrics from feedback
-  autorater.py            # Script 3: Rate a candidate prompt file
+  dump_traces.py          # Langfuse → JSONL dataset
+  gen_rubrics.py          # Generate boolean rubrics from feedback
+  autorater.py            # Rate a candidate prompt file
+  view_traces.py          # Terminal viewer (list + detail)
+  launch_viewer.py        # Serve the HTML viewer with direct-to-disk save
+  viewer.html             # Self-contained HTML viewer / rubric editor
   prompts/
-    v1_baseline.txt       # Copy of current prompt (for reference/baseline run)
+    v1_baseline.txt       # Copy of current prompt
   data/
-    .gitignore            # Ignores traces.jsonl and results/ (contain scraped content)
-    rubrics.json          # Principle-based rubrics — human-reviewed, committed to git
-    example_rubrics.jsonl # Example-specific rubrics — committed to git
+    .gitignore            # Ignores */traces.jsonl and */results/
+    v1/                   # Example versioned dataset (created at runtime)
+      traces.jsonl        #   gitignored — scraped article content
+      rubrics.json        #   principle-based rubrics (committed, human-reviewed)
+      example_rubrics.jsonl  # per-trace rubrics from user comments (committed)
+      results/            #   gitignored — per-run score reports
 ```
 
-**Workflow:**
+**All Makefile targets require `VERSION=`:**
 ```bash
-make eval-dump                                    # Pull new traces from Langfuse
-make eval-rubrics                                 # Generate rubrics (review rubrics.json after)
-make eval-rate PROMPT=eval/prompts/v1_baseline.txt  # Score a candidate prompt
+make eval-dump    VERSION=v1               # Pull new traces from Langfuse
+make eval-rubrics VERSION=v1               # Generate rubrics (review rubrics.json after)
+make eval-rate    VERSION=v1 PROMPT=eval/prompts/v1_baseline.txt  # Score a prompt
+make eval-view    VERSION=v1               # Terminal list view
+make eval-show    VERSION=v1 TRACE=<id>   # Terminal detail view for one trace
+make eval-viewer  VERSION=v1               # Launch HTML viewer (opens browser)
 ```
 
 **Two rubric tiers:**
 - **Principle-based** (`rubrics.json`): global, applied to every example, shows per-rubric pass rate
-- **Example-specific** (`example_rubrics.jsonl`): per-trace, derived from user comments, keyed by `trace_id`
+- **Example-specific** (`example_rubrics.jsonl`): per-trace, derived from user comments, keyed by `trace_id`; `generated_from_comment` field enables idempotent re-generation without clobbering human edits
+
+**HTML viewer** (`make eval-viewer`): runs a local HTTP server, opens browser, supports editing example-specific rubrics and saving directly to disk (no Downloads folder).
 
 **Eval scripts use `gemini-3-flash-preview`** — same model as the production bot.
 
-**Gitignored:** `eval/data/traces.jsonl` and `eval/data/results/` (contain scraped article content). **Committed:** `eval/data/rubrics.json` and `eval/data/example_rubrics.jsonl`.
+**Gitignored:** `eval/data/*/traces.jsonl` and `eval/data/*/results/` (contain scraped article content). **Committed:** `rubrics.json` and `example_rubrics.jsonl` per version.

@@ -443,6 +443,15 @@ function markEdited(traceId, rubrics) {
   }
   updateUnsavedBadge();
   renderList();
+  if (selectedId === traceId) refreshRubricPanelMeta(traceId);
+}
+
+function refreshRubricPanelMeta(traceId) {
+  const n = getRubrics(traceId).length;
+  const countEl = document.getElementById('rubric-count-label');
+  if (countEl) countEl.textContent = `${n} rubric${n !== 1 ? 's' : ''}`;
+  const unsavedEl = document.getElementById('rubrics-unsaved');
+  if (unsavedEl) unsavedEl.style.display = editedRubrics.has(traceId) ? '' : 'none';
 }
 
 function updateUnsavedBadge() {
@@ -453,8 +462,10 @@ function updateUnsavedBadge() {
 // ── List ───────────────────────────────────────────────────────────────────────
 
 function renderList() {
-  document.getElementById('sidebar-hd').textContent =
-    traces.length ? `${traces.length} trace${traces.length !== 1 ? 's' : ''}` : 'No traces loaded';
+  const totalRubrics = traces.reduce((sum, t) => sum + getRubrics(t.trace_id).length, 0);
+  document.getElementById('sidebar-hd').textContent = traces.length
+    ? `${traces.length} trace${traces.length !== 1 ? 's' : ''} · ${totalRubrics} rubric${totalRubrics !== 1 ? 's' : ''}`
+    : 'No traces loaded';
 
   const el = document.getElementById('trace-list');
   if (!traces.length) {
@@ -555,8 +566,8 @@ function renderDetail(traceId) {
       <div class="rubrics-panel" id="rubrics-panel">
         <div class="rubrics-hd">
           <span class="rubrics-title">Example-Specific Rubrics</span>
-          ${isDirty ? '<span class="badge b-warn">unsaved</span>' : ''}
-          <span style="font-size:10px;color:#94a3b8;margin-left:auto">
+          <span class="badge b-warn" id="rubrics-unsaved" style="${isDirty ? '' : 'display:none'}">unsaved</span>
+          <span id="rubric-count-label" style="font-size:10px;color:#94a3b8;margin-left:auto">
             ${rubrics.length} rubric${rubrics.length !== 1 ? 's' : ''}
           </span>
         </div>

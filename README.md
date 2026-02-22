@@ -131,43 +131,36 @@ WantedBy=multi-user.target
 - **✍️ Prompt Tuning:** Edit `SUMMARIZATION_PROMPT_TEMPLATE` in `prompts.py`. Use `test_prompt.py` to preview changes immediately.
 - **🤖 Model Choice:** The model is `gemini-3-flash-preview` (set as `MODEL_NAME` in `main.py`).
 
-## 🚧 Eval / Prompt Tuning Workflow (Under Construction)
+## 📊 Eval / Prompt Tuning Workflow
 
-> **Note:** This section describes a workflow that is currently being built out. Scripts exist but have not yet been validated end-to-end against real data.
-
-An offline hill-climbing loop for systematically improving the prompt using collected feedback.
-
-### Overview
-
-```
-eval/
-  dump_traces.py          # Pull traces + feedback from Langfuse → local JSONL
-  gen_rubrics.py          # Generate boolean eval rubrics from feedback
-  autorater.py            # Score a candidate prompt file against all rubrics
-  prompts/
-    v1_baseline.txt       # Baseline prompt (copy of current prompts.py template)
-  data/
-    rubrics.json          # Principle-based rubrics (committed, human-reviewed)
-    example_rubrics.jsonl # Per-trace rubrics derived from user comments (committed)
-    traces.jsonl          # Scraped article content — gitignored
-    results/              # Per-run score reports — gitignored
-```
+An offline hill-climbing loop for systematically improving the prompt using collected feedback. Datasets are always versioned (e.g. `eval/data/v1/`).
 
 ### Usage
 
 ```bash
 # 1. Pull new traces from Langfuse
-make eval-dump
+make eval-dump VERSION=v1
 
-# 2. Generate rubrics (review and edit eval/data/rubrics.json before proceeding)
-make eval-rubrics
+# 2. Generate rubrics (review and edit eval/data/v1/rubrics.json before proceeding)
+make eval-rubrics VERSION=v1
 
-# 3. Score the baseline prompt
-make eval-rate PROMPT=eval/prompts/v1_baseline.txt
+# 3. Browse traces and edit per-trace rubrics in the HTML viewer
+make eval-viewer VERSION=v1
 
-# 4. Write a new prompt variant, then compare
-make eval-rate PROMPT=eval/prompts/v2.txt
+# 4. Score the baseline prompt
+make eval-rate VERSION=v1 PROMPT=eval/prompts/v1_baseline.txt
+
+# 5. Write a new prompt variant, then compare
+make eval-rate VERSION=v1 PROMPT=eval/prompts/v2.txt
+
+# Terminal viewer (list / detail)
+make eval-view VERSION=v1
+make eval-show VERSION=v1 TRACE=<id-prefix>
 ```
+
+### HTML Viewer
+
+`make eval-viewer VERSION=v1` starts a local server and opens the browser. You can browse all traces, view article text / prompt / response side-by-side, and edit example-specific rubrics — changes save directly to `eval/data/v1/example_rubrics.jsonl` on disk.
 
 ### Rubric Tiers
 
@@ -176,7 +169,7 @@ make eval-rate PROMPT=eval/prompts/v2.txt
 | **Principle-based** | Global (`rubrics.json`) | Every example | Per-rubric pass rate |
 | **Example-specific** | Per-trace (`example_rubrics.jsonl`) | Matching trace only | Overall pass rate |
 
-Principle rubrics are LLM-generated from rated examples, then human-reviewed and committed. Example-specific rubrics are derived automatically from `user_comment` feedback scores in Langfuse.
+Principle rubrics are LLM-generated from rated examples, then human-reviewed and committed. Example-specific rubrics are derived automatically from `user_comment` feedback scores in Langfuse, and can be manually edited in the HTML viewer.
 
 ## 🗺️ Future Work
 
