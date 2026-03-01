@@ -185,9 +185,21 @@ Opens a read-only browser UI where you can:
 | **Principle-based** | Global (`global_rubrics.jsonl`) | Every example | Per-rubric pass rate |
 | **Example-specific** | Per-trace (`example_rubrics.jsonl`) | Matching trace only | Overall pass rate |
 
+## ⚠️ Link Crawling Limitations
+
+The built-in scraper (`trafilatura`) works well for standard article pages but is **not robust enough for all sites**. It will often fail or return poor results for:
+
+- **Social media** (Twitter/X, Instagram, LinkedIn, etc.)
+- **Paywalled content** (NYT, WSJ, The Atlantic, etc.)
+- **JavaScript-heavy sites** that require a real browser to render
+- **Sites with aggressive anti-bot measures**
+
+For broader coverage, consider pre-processing links through a dedicated crawling service such as [Firecrawl](https://github.com/firecrawl/firecrawl) before they reach this bot. A common pattern is a separate Telegram automation that fetches and cleans article content, then forwards the result to Channel A — but that pipeline is **out of scope for this project**.
+
+This bot only concerns itself with two channels: a source channel (Channel A) and a destination channel (Channel B). What gets posted to Channel A, and how, is up to you.
+
 ## 🗺️ Future Work
 
-- [ ] **🌐 Advanced Scraping:** Playwright/Browserless for JS-heavy sites.
 - [ ] **👥 Whitelisting:** Support for multiple authorized users.
 - [ ] **💬 Custom Instructions:** Tailor summaries via message captions.
 - [ ] **🔌 Multi-Model Support:** Add OpenAI or Anthropic integration.
