@@ -70,11 +70,17 @@ _pending_note: dict[int, int] = {}
 BOT_USERNAME: str = ""
 
 
-def extract_url(text):
-    """Extracts the first URL from the text."""
-    url_pattern = r'(https?://\S+)'
-    match = re.search(url_pattern, text)
-    return match.group(0) if match else None
+def extract_url(text: str | None, entities=None) -> str | None:
+    """Extracts the first URL from text or message entities (TEXT_LINK)."""
+    if text:
+        match = re.search(r'(https?://\S+)', text)
+        if match:
+            return match.group(0)
+    if entities:
+        for entity in entities:
+            if entity.type == "text_link" and entity.url:
+                return entity.url
+    return None
 
 def scrape_content(url):
     """Scrapes the content of the URL using trafilatura."""
@@ -180,18 +186,16 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Ignoring message: Chat ID {chat_id} does not match CHANNEL_A_ID {CHANNEL_A_ID}")
         return
 
-    message_text = update.channel_post.text or update.channel_post.caption if update.channel_post else None
-    if not message_text:
-        logger.info("Message has no text or caption. Skipping.")
-        return
+    message = update.channel_post
+    message_text = message.text or message.caption
+    all_entities = list(message.entities or []) + list(message.caption_entities or [])
 
-    logger.info(f"Processing message from Channel A: {message_text[:100]}...")
-
-    url = extract_url(message_text)
+    url = extract_url(message_text, all_entities)
     if not url:
-        logger.info("No URL found in message.")
+        logger.info("No URL found in message (text or entities). Skipping.")
         return
 
+    logger.info(f"Processing message from Channel A: {(message_text or '')[:100]}...")
     logger.info(f"Found URL: {url}")
 
     # Send placeholder immediately
