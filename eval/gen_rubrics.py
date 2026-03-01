@@ -2,7 +2,7 @@
 gen_rubrics.py — Generate evaluation rubrics from trace feedback.
 
 Produces two outputs (both in eval/data/<version>/):
-  rubrics.json          — Principle-based rubrics (global, human-reviewed)
+  global_rubrics.jsonl  — Principle-based rubrics (global, human-reviewed; one per line)
   example_rubrics.jsonl — Example-specific rubrics (per trace, from user comments)
 
 Usage:
@@ -171,7 +171,7 @@ def main():
 
     data_dir = Path(__file__).parent / "data" / args.version
     traces_file = data_dir / "traces.jsonl"
-    rubrics_file = data_dir / "rubrics.json"
+    global_rubrics_file = data_dir / "global_rubrics.jsonl"
     example_rubrics_file = data_dir / "example_rubrics.jsonl"
     data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -179,23 +179,47 @@ def main():
     traces = load_traces(traces_file)
     print(f"Version: {args.version} | Loaded {len(traces)} trace(s)")
 
-    # ── Principle-based rubrics ──────────────────────────────────────────────
-    if rubrics_file.exists():
-        answer = input(f"\n{rubrics_file} already exists. Overwrite? [y/N] ").strip().lower()
-        if answer != "y":
-            print("Skipping principle rubric generation.")
-        else:
-            rubrics = generate_principle_rubrics(client, traces)
-            with open(rubrics_file, "w") as f:
-                json.dump(rubrics, f, indent=2)
-            print(f"Wrote {len(rubrics)} principle rubric(s) to {rubrics_file}")
-            print("Review and edit rubrics.json before running autorater.")
+    # ── Principle-based rubrics (merge-safe) ─────────────────────────────────
+    # Load existing rubrics from global_rubrics.jsonl (JSONL format)
+    existing_rubrics: list[dict] = []
+    if global_rubrics_file.exists():
+        for line in global_rubrics_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    existing_rubrics.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+
+    print(f"Existing global rubrics: {len(existing_rubrics)}")
+    print("Calling Gemini to generate principle rubrics...")
+    candidates = generate_principle_rubrics(client, traces)
+
+    # Dedup: skip candidates whose statement matches any existing (case-insensitive)
+    existing_stmts = {r["statement"].strip().lower() for r in existing_rubrics}
+    new_rubrics = [r for r in candidates if r["statement"].strip().lower() not in existing_stmts]
+
+    if not new_rubrics:
+        print(f"No new rubrics to add. ({len(existing_rubrics)} existing)")
     else:
-        rubrics = generate_principle_rubrics(client, traces)
-        with open(rubrics_file, "w") as f:
-            json.dump(rubrics, f, indent=2)
-        print(f"Wrote {len(rubrics)} principle rubric(s) to {rubrics_file}")
-        print("Review and edit rubrics.json before running autorater.")
+        # Renumber new rubric IDs to continue from highest existing ID
+        max_id = 0
+        for r in existing_rubrics:
+            try:
+                n = int("".join(filter(str.isdigit, r.get("id", "0"))) or "0")
+                max_id = max(max_id, n)
+            except ValueError:
+                pass
+        for i, r in enumerate(new_rubrics, max_id + 1):
+            r["id"] = f"r{i}"
+
+        merged = existing_rubrics + new_rubrics
+        with open(global_rubrics_file, "w") as f:
+            for r in merged:
+                f.write(json.dumps(r) + "\n")
+        print(f"Merged: {len(existing_rubrics)} existing + {len(new_rubrics)} new = {len(merged)} rubrics")
+        print(f"Wrote to {global_rubrics_file}")
+        print("Review and edit global_rubrics.jsonl before running autorater.")
 
     # ── Example-specific rubrics ─────────────────────────────────────────────
     processed = load_processed_comments(example_rubrics_file)

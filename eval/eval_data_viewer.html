@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Eval Viewer</title>
+<title>Eval Data Viewer</title>
 <!-- __PRELOADED__ -->
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -16,6 +16,9 @@
   --subtle: #94a3b8;
   --accent: #3b82f6;
   --accent-bg: #eff6ff;
+  --green: #16a34a;
+  --green-bg: #dcfce7;
+  --green-border: #86efac;
 }
 
 body {
@@ -61,6 +64,18 @@ body {
 .btn-sm { padding: 2px 7px; font-size: 11px; }
 .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
 .btn-outline:hover { background: var(--bg); }
+.btn-ready {
+  background: var(--green-bg);
+  color: var(--green);
+  border: 1px solid var(--green-border);
+}
+.btn-ready:hover { background: #bbf7d0; }
+.btn-ready-off {
+  background: rgba(255,255,255,0.10);
+  color: #94a3b8;
+  border: 1px solid rgba(255,255,255,0.18);
+}
+.btn-ready-off:hover { background: rgba(255,255,255,0.18); color: #f1f5f9; }
 
 .file-row { display: flex; align-items: center; gap: 5px; }
 .file-st { font-size: 11px; color: #64748b; }
@@ -126,17 +141,10 @@ body {
 }
 .ti-top { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
 .ti-tid { font-family: monospace; font-size: 11px; color: var(--muted); }
+.ti-ready { font-size: 11px; color: var(--green); font-weight: 600; }
 .ti-url {
   font-size: 12px;
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.ti-comment {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -164,9 +172,21 @@ body {
   border-bottom: 1px solid var(--border);
   background: var(--bg);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
-.detail-url { font-size: 14px; font-weight: 600; margin-bottom: 4px; word-break: break-all; }
-.detail-sub { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 11px; color: var(--muted); }
+.detail-url {
+  font-size: 13px;
+  font-weight: 600;
+  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+}
+.detail-url a { color: var(--text); text-decoration: none; }
+.detail-url a:hover { text-decoration: underline; color: var(--accent); }
+.detail-tid { font-family: monospace; font-size: 10px; color: var(--muted); white-space: nowrap; }
 
 .tabs {
   display: flex;
@@ -174,6 +194,7 @@ body {
   background: var(--surface);
   flex-shrink: 0;
   padding: 0 15px;
+  overflow-x: auto;
 }
 .tab {
   padding: 7px 11px;
@@ -182,6 +203,7 @@ body {
   color: var(--muted);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
+  white-space: nowrap;
 }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
 .tab:hover:not(.active) { color: var(--text); }
@@ -224,8 +246,12 @@ body {
 .rendered-block pre  { background: #f1f5f9; border-radius: 6px; padding: 10px 12px; overflow-x: auto; font-size: 12px; line-height: 1.6; }
 .rendered-block blockquote { border-left: 3px solid #cbd5e1; margin: 6px 0; padding-left: 10px; color: var(--muted); }
 
+/* ── Metadata tab ────────────────────────────────────────────────────────── */
+.meta-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.meta-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.meta-table td:first-child { color: var(--muted); white-space: nowrap; width: 130px; }
+
 /* ── Rubrics ─────────────────────────────────────────────────────────────── */
-.rubrics-panel { padding: 12px 15px 16px; border-top: 1px solid var(--border); }
 .rubrics-hd { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
 .rubrics-title { font-size: 12px; font-weight: 600; color: var(--text); }
 
@@ -299,12 +325,18 @@ body {
   margin-top: 4px;
 }
 .add-btn:hover { background: var(--bg); color: var(--text); border-color: var(--subtle); }
+
+.empty-tab-msg {
+  font-size: 12px;
+  color: var(--subtle);
+  font-style: italic;
+}
 </style>
 </head>
 <body>
 
 <header class="header">
-  <h1>Eval Viewer</h1>
+  <h1>Eval Data Viewer</h1>
   <div id="header-controls"></div>
   <span id="unsaved-badge" class="badge b-warn" style="display:none">● unsaved changes</span>
   <button class="btn btn-primary btn-sm" onclick="exportRubrics()">⬇ Export example_rubrics.jsonl</button>
@@ -330,9 +362,12 @@ body {
 let traces = [];
 let savedRubrics = new Map();  // trace_id → rubric[]  (from loaded file, merged)
 let editedRubrics = new Map(); // trace_id → rubric[]  (unsaved edits)
+let globalRubrics = [];        // global rubrics from global_rubrics.jsonl
+let evalReady = new Set();     // trace_ids marked as ready for eval
 let selectedId = null;
-let activeTab = 'rendered';
+let activeTab = 'article_text';
 let versionRelPath = null;     // e.g. "eval/data/v1" — set when pre-loaded
+let serverMode = false;
 
 // ── Startup ────────────────────────────────────────────────────────────────────
 
@@ -346,16 +381,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initPreloaded(data) {
   versionRelPath = data.relPath || null;
+  serverMode = data.serverMode || false;
   traces = data.traces || [];
+  globalRubrics = data.globalRubrics || [];
   initRubricsFromEntries(data.exampleRubrics || []);
+  initEvalReady(data.examplesMetadata || []);
 
   const controls = document.getElementById('header-controls');
   controls.innerHTML = `
     <span class="version-pill">${data.version}</span>
-    <span class="file-st ok" style="font-size:11px">
-      ${traces.length} traces · <span id="header-rubric-count"></span> · auto-loaded from ${data.relPath}/
-    </span>`;
+    <span class="file-st ok" style="font-size:11px" id="header-counts"></span>`;
 
+  updateHeaderCounts();
   renderList();
 }
 
@@ -413,6 +450,65 @@ function loadRubrics(e) {
   reader.readAsText(file);
 }
 
+// ── Eval-ready helpers ─────────────────────────────────────────────────────────
+
+function initEvalReady(examplesMetadata) {
+  evalReady = new Set();
+  for (const entry of examplesMetadata) {
+    if (entry.trace_id && entry.eval_ready) {
+      evalReady.add(entry.trace_id);
+    }
+  }
+}
+
+function updateHeaderCounts() {
+  const el = document.getElementById('header-counts');
+  if (!el) return;
+  el.textContent = `${evalReady.size} ready · ${traces.length} total`;
+}
+
+async function toggleEvalReady(traceId) {
+  if (evalReady.has(traceId)) {
+    evalReady.delete(traceId);
+  } else {
+    evalReady.add(traceId);
+  }
+  updateHeaderCounts();
+  renderList();
+  if (selectedId === traceId) renderDetail(traceId);
+
+  if (serverMode) {
+    await saveExamples();
+  }
+}
+
+async function saveExamples() {
+  // Build examples.jsonl: one line per trace that has any metadata
+  const lines = [];
+  for (const t of traces) {
+    const isReady = evalReady.has(t.trace_id);
+    // Only write if ready (omit false entries to keep file clean; missing = not ready)
+    if (isReady) {
+      lines.push(JSON.stringify({ trace_id: t.trace_id, eval_ready: true }));
+    }
+  }
+  const content = lines.join('\n') + (lines.length ? '\n' : '');
+
+  try {
+    const resp = await fetch('/save-examples', {
+      method: 'POST',
+      body: content,
+      headers: { 'Content-Type': 'application/x-ndjson' },
+    });
+    const result = await resp.json();
+    if (!result.ok) {
+      console.error('Save examples failed:', result.error);
+    }
+  } catch (e) {
+    console.error('Save examples error:', e);
+  }
+}
+
 // ── Rubric helpers ─────────────────────────────────────────────────────────────
 
 function initRubricsFromEntries(entries) {
@@ -465,10 +561,10 @@ function markEdited(traceId, rubrics) {
   }
   updateUnsavedBadge();
   renderList();
-  if (selectedId === traceId) refreshRubricPanelMeta(traceId);
+  if (selectedId === traceId) refreshRubricTabMeta(traceId);
 }
 
-function refreshRubricPanelMeta(traceId) {
+function refreshRubricTabMeta(traceId) {
   const n = getRubrics(traceId).length;
   const countEl = document.getElementById('rubric-count-label');
   if (countEl) countEl.textContent = `${n} rubric${n !== 1 ? 's' : ''}`;
@@ -484,16 +580,9 @@ function updateUnsavedBadge() {
 // ── List ───────────────────────────────────────────────────────────────────────
 
 function renderList() {
-  const totalRubrics = traces.reduce((sum, t) => sum + getRubrics(t.trace_id).length, 0);
   document.getElementById('sidebar-hd').textContent = traces.length
-    ? `${traces.length} trace${traces.length !== 1 ? 's' : ''} · ${totalRubrics} rubric${totalRubrics !== 1 ? 's' : ''}`
+    ? `${traces.length} trace${traces.length !== 1 ? 's' : ''}`
     : 'No traces loaded';
-
-  const headerCount = document.getElementById('header-rubric-count');
-  if (headerCount) {
-    const withRubrics = traces.filter(t => getRubrics(t.trace_id).length > 0).length;
-    headerCount.textContent = `${withRubrics} with rubrics · ${totalRubrics} total`;
-  }
 
   const el = document.getElementById('trace-list');
   if (!traces.length) {
@@ -506,26 +595,18 @@ function renderList() {
     const isDirty = editedRubrics.has(t.trace_id);
     const rubrics = getRubrics(t.trace_id);
     const url = (t.url || '').replace(/^https?:\/\//, '');
-    const comment = toStr(t.user_comment);
+    const isReady = evalReady.has(t.trace_id);
 
     return `<div class="trace-item${isActive ? ' active' : ''}" onclick="select('${t.trace_id}')">
       <div class="ti-top">
+        ${isReady ? '<span class="ti-ready">✓</span>' : ''}
         <span class="ti-tid">${t.trace_id.slice(0, 8)}</span>
-        ${ratingBadge(t.user_rating)}
         ${rubrics.length ? `<span style="font-size:10px;color:#94a3b8">${rubrics.length}r</span>` : ''}
         ${isDirty ? '<span class="badge b-warn" style="font-size:9px">●</span>' : ''}
       </div>
       <div class="ti-url">${esc(url) || '<span style="color:#94a3b8">no url</span>'}</div>
-      ${comment ? `<div class="ti-comment">💬 ${esc(comment.slice(0, 65))}${comment.length > 65 ? '…' : ''}</div>` : ''}
     </div>`;
   }).join('');
-}
-
-function ratingBadge(val) {
-  if (val === null || val === undefined) return '<span class="badge b-none">—</span>';
-  return (val === 1 || val === 1.0 || val === true)
-    ? '<span class="badge b-pass">👍</span>'
-    : '<span class="badge b-fail">👎</span>';
 }
 
 // ── Detail ─────────────────────────────────────────────────────────────────────
@@ -545,31 +626,26 @@ function renderDetail(traceId) {
   const t = traces.find(x => x.trace_id === traceId);
   if (!t) return;
 
-  const ts = t.timestamp ? new Date(t.timestamp).toLocaleString() : '—';
-  const comment = toStr(t.user_comment) || '—';
   const rubrics = getRubrics(traceId);
   const isDirty = editedRubrics.has(traceId);
+  const isReady = evalReady.has(traceId);
 
   const TABS = [
-    { id: 'rendered',     label: 'Preview',   field: 'response',      render: true },
-    { id: 'response',     label: 'Response',  field: 'response' },
-    { id: 'article_text', label: 'Article',   field: 'article_text' },
-    { id: 'prompt',       label: 'Prompt',    field: 'prompt' },
+    { id: 'article_text',  label: 'Article',        field: 'article_text' },
+    { id: 'rendered',      label: 'Preview',        field: 'response',     render: true },
+    { id: 'response',      label: 'Response',       field: 'response' },
+    { id: 'prompt',        label: 'Prompt',         field: 'prompt' },
+    { id: 'rubrics',       label: 'Rubrics',        custom: true },
+    { id: 'global_rubrics',label: 'Global Rubrics', custom: true },
+    { id: 'metadata',      label: 'Metadata',       custom: true },
   ];
 
   const tabsHtml = TABS.map(tab => `
     <div class="tab${activeTab === tab.id ? ' active' : ''}" onclick="switchTab('${tab.id}')">
-      ${tab.label}${tab.render ? '' : `<span class="tab-len">${fmtLen(t[tab.field])}</span>`}
+      ${tab.label}${(!tab.render && !tab.custom) ? `<span class="tab-len">${fmtLen(t[tab.field])}</span>` : ''}
     </div>`).join('');
 
-  const panelsHtml = TABS.map(tab => {
-    const content = t[tab.field] || '';
-    const inner = tab.render
-      ? `<div class="rendered-block">${content || '<span style="color:#94a3b8">(empty)</span>'}</div>`
-      : `<div class="text-block">${esc(content || '(empty)')}</div>`;
-    return `<div class="tab-panel${activeTab === tab.id ? ' active' : ''}">${inner}</div>`;
-  }).join('');
-
+  // ── Tab panel content ──────────────────────────────────────────────────────
   const rubricItemsHtml = rubrics.map((r, i) => `
     <div class="rubric-item" id="ri-${i}">
       <span class="badge ${r.source === 'human' ? 'b-human' : 'b-llm'}" style="flex-shrink:0;margin-top:1px">
@@ -582,33 +658,81 @@ function renderDetail(traceId) {
       </div>
     </div>`).join('');
 
+  const globalRubricsHtml = globalRubrics.length
+    ? globalRubrics.map(r => `
+        <div class="rubric-item">
+          <span class="badge b-llm" style="flex-shrink:0;margin-top:1px">${esc(r.id || '')}</span>
+          <span class="rubric-stmt">${esc(r.statement)}</span>
+        </div>`).join('')
+    : `<p class="empty-tab-msg">No global rubrics loaded. Edit <code>global_rubrics.jsonl</code> directly or run <code>make eval-rubrics</code>.</p>`;
+
+  const ts = t.timestamp ? new Date(t.timestamp).toLocaleString() : '—';
+  const comment = toStr(t.user_comment) || '—';
+
+  function panelFor(tab) {
+    const isActive = activeTab === tab.id;
+    const cls = `tab-panel${isActive ? ' active' : ''}`;
+
+    if (tab.custom) {
+      if (tab.id === 'rubrics') {
+        return `<div class="${cls}" id="rubrics-tab-panel">
+          <div class="rubrics-hd">
+            <span class="rubrics-title">Example-Specific Rubrics</span>
+            <span class="badge b-warn" id="rubrics-unsaved" style="${isDirty ? '' : 'display:none'}">unsaved</span>
+            <span id="rubric-count-label" style="font-size:10px;color:#94a3b8;margin-left:auto">
+              ${rubrics.length} rubric${rubrics.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div id="rubric-list">
+            ${rubricItemsHtml || '<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">No rubrics yet.</div>'}
+          </div>
+          <button class="add-btn" onclick="addRubric('${traceId}')">＋ Add rubric</button>
+        </div>`;
+      }
+      if (tab.id === 'global_rubrics') {
+        return `<div class="${cls}">
+          <div class="rubrics-hd">
+            <span class="rubrics-title">Global Rubrics</span>
+            <span style="font-size:10px;color:#94a3b8;margin-left:auto">${globalRubrics.length} rubric${globalRubrics.length !== 1 ? 's' : ''} · read-only</span>
+          </div>
+          ${globalRubricsHtml}
+        </div>`;
+      }
+      if (tab.id === 'metadata') {
+        return `<div class="${cls}">
+          <table class="meta-table">
+            <tr><td>Rating</td><td>${ratingBadge(t.user_rating)}</td></tr>
+            <tr><td>Timestamp</td><td>${esc(ts)}</td></tr>
+            <tr><td>User comment</td><td>${esc(comment)}</td></tr>
+          </table>
+        </div>`;
+      }
+    }
+
+    const content = t[tab.field] || '';
+    const inner = tab.render
+      ? `<div class="rendered-block">${content || '<span style="color:#94a3b8">(empty)</span>'}</div>`
+      : `<div class="text-block">${esc(content || '(empty)')}</div>`;
+    return `<div class="${cls}">${inner}</div>`;
+  }
+
+  const panelsHtml = TABS.map(panelFor).join('');
+
+  // ── Ready toggle button ────────────────────────────────────────────────────
+  const readyBtn = isReady
+    ? `<button class="btn btn-ready btn-sm" onclick="toggleEvalReady('${traceId}')">✓ Ready for eval</button>`
+    : `<button class="btn btn-ready-off btn-sm" onclick="toggleEvalReady('${traceId}')">Mark ready for eval</button>`;
+
   document.getElementById('detail').innerHTML = `
     <div class="detail-hd">
-      <div class="detail-url">${esc(t.url || '(no url)')}</div>
-      <div class="detail-sub">
-        <span style="font-family:monospace;font-size:10px">${traceId}</span>
-        ${ratingBadge(t.user_rating)}
-        <span>🕐 ${ts}</span>
-        <span>💬 ${esc(comment)}</span>
+      <div class="detail-url">
+        <a href="${esc(t.url || '')}" target="_blank" rel="noopener">${esc(t.url || '(no url)')}</a>
       </div>
+      <span class="detail-tid">${traceId}</span>
+      ${readyBtn}
     </div>
     <div class="tabs">${tabsHtml}</div>
-    <div class="detail-body">
-      ${panelsHtml}
-      <div class="rubrics-panel" id="rubrics-panel">
-        <div class="rubrics-hd">
-          <span class="rubrics-title">Example-Specific Rubrics</span>
-          <span class="badge b-warn" id="rubrics-unsaved" style="${isDirty ? '' : 'display:none'}">unsaved</span>
-          <span id="rubric-count-label" style="font-size:10px;color:#94a3b8;margin-left:auto">
-            ${rubrics.length} rubric${rubrics.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-        <div id="rubric-list">
-          ${rubricItemsHtml || '<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">No rubrics yet.</div>'}
-        </div>
-        <button class="add-btn" onclick="addRubric('${traceId}')">＋ Add rubric</button>
-      </div>
-    </div>
+    <div class="detail-body">${panelsHtml}</div>
   `;
 }
 
@@ -675,7 +799,7 @@ function addRubric(traceId) {
       <button class="btn btn-outline btn-sm" onclick="cancelAdd('${traceId}',${last})">Cancel</button>
     </div>`;
   document.getElementById(`ta-${last}`).focus();
-  setTimeout(() => document.getElementById('rubrics-panel')
+  setTimeout(() => document.getElementById('rubrics-tab-panel')
     ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 30);
 }
 
@@ -783,6 +907,13 @@ function showSaveNotification(msg) {
 }
 
 // ── Utils ──────────────────────────────────────────────────────────────────────
+
+function ratingBadge(val) {
+  if (val === null || val === undefined) return '<span class="badge b-none">—</span>';
+  return (val === 1 || val === 1.0 || val === true)
+    ? '<span class="badge b-pass">👍</span>'
+    : '<span class="badge b-fail">👎</span>';
+}
 
 function esc(s) {
   return String(s ?? '')

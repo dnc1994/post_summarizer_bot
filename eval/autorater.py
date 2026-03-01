@@ -164,7 +164,7 @@ def main():
 
     data_dir = Path(__file__).parent / "data" / args.version
     dataset_path = Path(args.dataset) if args.dataset else data_dir / "traces.jsonl"
-    rubrics_path = Path(args.rubrics) if args.rubrics else data_dir / "rubrics.json"
+    rubrics_path = Path(args.rubrics) if args.rubrics else data_dir / "global_rubrics.jsonl"
     example_rubrics_path = Path(args.example_rubrics) if args.example_rubrics else data_dir / "example_rubrics.jsonl"
 
     prompt_path = Path(args.prompt_file)
@@ -183,13 +183,28 @@ def main():
 
     traces = load_jsonl(dataset_path)
     traces = [t for t in traces if t.get("article_text")]
+
+    # Filter by eval_ready from examples.jsonl
+    examples_path = data_dir / "examples.jsonl"
+    if examples_path.exists():
+        examples_meta = load_jsonl(examples_path)
+        eval_ready_ids = {e["trace_id"] for e in examples_meta if e.get("eval_ready")}
+        if eval_ready_ids:
+            original_count = len(traces)
+            traces = [t for t in traces if t["trace_id"] in eval_ready_ids]
+            print(f"Filtered to {len(traces)} eval-ready trace(s) (of {original_count} total)")
+        else:
+            print("Warning: examples.jsonl has no eval_ready entries — evaluating all traces")
+    else:
+        print("Note: examples.jsonl not found — evaluating all traces")
+
     if args.limit:
         traces = traces[:args.limit]
 
     principle_rubrics: list[dict] = []
     if rubrics_path.exists():
-        with open(rubrics_path) as f:
-            principle_rubrics = json.load(f)
+        # global_rubrics.jsonl uses JSONL format (one rubric per line)
+        principle_rubrics = load_jsonl(rubrics_path)
         print(f"Loaded {len(principle_rubrics)} principle rubric(s) from {rubrics_path}")
     else:
         print(f"Warning: {rubrics_path} not found. Skipping principle rubrics.")

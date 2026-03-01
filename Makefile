@@ -24,4 +24,4 @@ eval-show:
 
 eval-viewer:
 	@test -n "$(VERSION)" || (echo "Error: Usage: make eval-viewer VERSION=v1" && exit 1)
-	uv run python eval/launch_viewer.py --version $(VERSION)
+	uv run python eval/launch_data_viewer.py --version $(VERSION)
