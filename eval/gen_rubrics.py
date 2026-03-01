@@ -30,12 +30,12 @@ def get_gemini_client():
     return genai.Client(api_key=api_key)
 
 
-def load_traces(traces_file: Path) -> list[dict]:
-    if not traces_file.exists():
-        print(f"Error: {traces_file} not found. Run dump_traces.py --version <v> first.", file=sys.stderr)
+def load_traces(examples_file: Path) -> list[dict]:
+    if not examples_file.exists():
+        print(f"Error: {examples_file} not found. Run dump_traces.py --version <v> first.", file=sys.stderr)
         sys.exit(1)
     records = []
-    with open(traces_file) as f:
+    with open(examples_file) as f:
         for line in f:
             line = line.strip()
             if line:
@@ -170,13 +170,13 @@ def main():
     args = parser.parse_args()
 
     data_dir = Path(__file__).parent / "data" / args.version
-    traces_file = data_dir / "traces.jsonl"
+    examples_file = data_dir / "examples.jsonl"
     global_rubrics_file = data_dir / "global_rubrics.jsonl"
     example_rubrics_file = data_dir / "example_rubrics.jsonl"
     data_dir.mkdir(parents=True, exist_ok=True)
 
     client = get_gemini_client()
-    traces = load_traces(traces_file)
+    traces = load_traces(examples_file)
     print(f"Version: {args.version} | Loaded {len(traces)} trace(s)")
 
     # ── Principle-based rubrics (merge-safe) ─────────────────────────────────

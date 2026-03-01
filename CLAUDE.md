@@ -82,12 +82,11 @@ eval/
   prompts/
     v1_baseline.txt         # Copy of current prompt
   data/
-    .gitignore              # Ignores */traces.jsonl and */results/
+    .gitignore              # Ignores everything in eval/data/
     v1/                     # Example versioned dataset (created at runtime)
-      traces.jsonl          #   gitignored — scraped article content
-      examples.jsonl        #   committed — per-example metadata: { trace_id, eval_ready }
-      global_rubrics.jsonl  #   committed — global rubrics, one per line (human-reviewed)
-      example_rubrics.jsonl #   committed — per-trace rubrics from user comments
+      examples.jsonl        #   gitignored — all trace data + eval_ready per trace
+      global_rubrics.jsonl  #   global rubrics, one per line (human-reviewed)
+      example_rubrics.jsonl #   per-trace rubrics from user comments
       results/              #   gitignored — per-run score reports
 ```
 
@@ -105,10 +104,10 @@ make eval-viewer  VERSION=v1               # Launch Eval Data Viewer (opens brow
 - **Global** (`global_rubrics.jsonl`): principle-based, applied to every example, one JSON object per line; `gen_rubrics.py` is merge-safe — re-running appends only novel statements (deduped case-insensitively)
 - **Example-specific** (`example_rubrics.jsonl`): per-trace, derived from user comments, keyed by `trace_id`; `generated_from_comment` field enables idempotent re-generation without clobbering human edits
 
-**"Ready for eval"** (`examples.jsonl`): per-example metadata committed to git. Each record: `{ "trace_id": "...", "eval_ready": true }`. Toggle in the Eval Data Viewer saves automatically. `autorater.py` filters to only eval-ready traces when this file has entries.
+**"Ready for eval"**: each trace record in `examples.jsonl` carries an `eval_ready: true` field when marked. Toggle in the Eval Data Viewer rewrites `examples.jsonl` in place. `autorater.py` filters to only eval-ready traces when any are marked.
 
 **Eval Data Viewer** (`make eval-viewer`): runs a local HTTP server, opens browser. Tabs: Article | Preview | Response | Prompt | Rubrics | Global Rubrics | Metadata. Supports editing example-specific rubrics and toggling "ready for eval", both saved directly to disk.
 
 **Eval scripts use `gemini-3-flash-preview`** — same model as the production bot.
 
-**Gitignored:** `eval/data/*/traces.jsonl` and `eval/data/*/results/` (contain scraped article content). **Committed:** `examples.jsonl`, `global_rubrics.jsonl`, and `example_rubrics.jsonl` per version.
+**Gitignored:** everything under `eval/data/` (contains scraped article content). The `.gitignore` uses `*\n!.gitignore` to ignore all files.

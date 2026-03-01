@@ -17,12 +17,12 @@ from pathlib import Path
 TERM_WIDTH = 100
 
 
-def load_traces(traces_file: Path) -> list[dict]:
-    if not traces_file.exists():
-        print(f"No dataset found at {traces_file}. Run make eval-dump VERSION=<v> first.")
+def load_traces(examples_file: Path) -> list[dict]:
+    if not examples_file.exists():
+        print(f"No dataset found at {examples_file}. Run make eval-dump VERSION=<v> first.")
         return []
     records = []
-    with open(traces_file) as f:
+    with open(examples_file) as f:
         for line in f:
             line = line.strip()
             if line:
@@ -46,7 +46,7 @@ def truncate(s, n: int) -> str:
     return s[:n] + "…" if len(s) > n else s
 
 
-def print_list(traces: list[dict], traces_file: Path):
+def print_list(traces: list[dict], examples_file: Path):
     if not traces:
         print("No traces.")
         return
@@ -64,7 +64,7 @@ def print_list(traces: list[dict], traces_file: Path):
         al = len(t.get("article_text") or "")
         print(f"{i:<4} {tid:<10} {rating:<7} {url:<45} {comment:<30} {pl}/{rl}/{al}")
 
-    print(f"\n{len(traces)} trace(s) in {traces_file}")
+    print(f"\n{len(traces)} trace(s) in {examples_file}")
 
 
 def print_field(label: str, text: str | None, width: int, max_lines: int = 40):
@@ -110,8 +110,8 @@ def main():
     args = parser.parse_args()
 
     data_dir = Path(__file__).parent / "data" / args.version
-    traces_file = data_dir / "traces.jsonl"
-    traces = load_traces(traces_file)
+    examples_file = data_dir / "examples.jsonl"
+    traces = load_traces(examples_file)
     if not traces:
         return
 
@@ -126,7 +126,7 @@ def main():
         for t in matches:
             print_detail(t, args.width)
     else:
-        print_list(traces, traces_file)
+        print_list(traces, examples_file)
 
 
 if __name__ == "__main__":

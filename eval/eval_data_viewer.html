@@ -65,17 +65,27 @@ body {
 .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
 .btn-outline:hover { background: var(--bg); }
 .btn-ready {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+.btn-ready:hover {
+  background: #fecaca;
+  color: #b91c1c;
+  border-color: #f87171;
+}
+.btn-ready-off {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.btn-ready-off:hover {
   background: var(--green-bg);
   color: var(--green);
-  border: 1px solid var(--green-border);
+  border-color: var(--green-border);
 }
-.btn-ready:hover { background: #bbf7d0; }
-.btn-ready-off {
-  background: rgba(255,255,255,0.10);
-  color: #94a3b8;
-  border: 1px solid rgba(255,255,255,0.18);
-}
-.btn-ready-off:hover { background: rgba(255,255,255,0.18); color: #f1f5f9; }
+.btn-danger { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
+.btn-danger:hover { background: #fecaca; color: #b91c1c; border-color: #f87171; }
 
 .file-row { display: flex; align-items: center; gap: 5px; }
 .file-st { font-size: 11px; color: #64748b; }
@@ -173,19 +183,28 @@ body {
   background: var(--bg);
   flex-shrink: 0;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 5px;
 }
-.detail-url {
-  font-size: 13px;
+.detail-hd-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.detail-title {
+  font-size: 14px;
   font-weight: 600;
-  word-break: break-all;
-  flex: 1;
-  min-width: 0;
+  color: var(--text);
+  line-height: 1.3;
+  margin-bottom: 3px;
 }
-.detail-url a { color: var(--text); text-decoration: none; }
-.detail-url a:hover { text-decoration: underline; color: var(--accent); }
+.detail-url-link {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+.detail-url-link:hover { text-decoration: underline; }
 .detail-tid { font-family: monospace; font-size: 10px; color: var(--muted); white-space: nowrap; }
 
 .tabs {
@@ -385,7 +404,7 @@ function initPreloaded(data) {
   traces = data.traces || [];
   globalRubrics = data.globalRubrics || [];
   initRubricsFromEntries(data.exampleRubrics || []);
-  initEvalReady(data.examplesMetadata || []);
+  initEvalReady(traces);
 
   const controls = document.getElementById('header-controls');
   controls.innerHTML = `
@@ -464,7 +483,8 @@ function initEvalReady(examplesMetadata) {
 function updateHeaderCounts() {
   const el = document.getElementById('header-counts');
   if (!el) return;
-  el.textContent = `${evalReady.size} ready · ${traces.length} total`;
+  const totalRubrics = traces.reduce((s, t) => s + getRubrics(t.trace_id).length, 0);
+  el.textContent = `${evalReady.size} ready · ${traces.length} total · ${totalRubrics} rubrics`;
 }
 
 async function toggleEvalReady(traceId) {
@@ -482,20 +502,23 @@ async function toggleEvalReady(traceId) {
   }
 }
 
-async function saveExamples() {
-  // Build examples.jsonl: one line per trace that has any metadata
+async function saveExamples(backup = false) {
+  // Rewrite examples.jsonl: all trace records with eval_ready embedded
   const lines = [];
   for (const t of traces) {
-    const isReady = evalReady.has(t.trace_id);
-    // Only write if ready (omit false entries to keep file clean; missing = not ready)
-    if (isReady) {
-      lines.push(JSON.stringify({ trace_id: t.trace_id, eval_ready: true }));
+    const record = { ...t };
+    if (evalReady.has(t.trace_id)) {
+      record.eval_ready = true;
+    } else {
+      delete record.eval_ready;
     }
+    lines.push(JSON.stringify(record));
   }
   const content = lines.join('\n') + (lines.length ? '\n' : '');
 
   try {
-    const resp = await fetch('/save-examples', {
+    const url = backup ? '/save-examples?backup=1' : '/save-examples';
+    const resp = await fetch(url, {
       method: 'POST',
       body: content,
       headers: { 'Content-Type': 'application/x-ndjson' },
@@ -560,6 +583,7 @@ function markEdited(traceId, rubrics) {
     editedRubrics.set(traceId, rubrics);
   }
   updateUnsavedBadge();
+  updateHeaderCounts();
   renderList();
   if (selectedId === traceId) refreshRubricTabMeta(traceId);
 }
@@ -701,6 +725,7 @@ function renderDetail(traceId) {
       if (tab.id === 'metadata') {
         return `<div class="${cls}">
           <table class="meta-table">
+            <tr><td>Trace ID</td><td><code style="font-size:11px;word-break:break-all">${esc(traceId)}</code></td></tr>
             <tr><td>Rating</td><td>${ratingBadge(t.user_rating)}</td></tr>
             <tr><td>Timestamp</td><td>${esc(ts)}</td></tr>
             <tr><td>User comment</td><td>${esc(comment)}</td></tr>
@@ -720,16 +745,23 @@ function renderDetail(traceId) {
 
   // ── Ready toggle button ────────────────────────────────────────────────────
   const readyBtn = isReady
-    ? `<button class="btn btn-ready btn-sm" onclick="toggleEvalReady('${traceId}')">✓ Ready for eval</button>`
-    : `<button class="btn btn-ready-off btn-sm" onclick="toggleEvalReady('${traceId}')">Mark ready for eval</button>`;
+    ? `<button class="btn btn-ready" onclick="toggleEvalReady('${traceId}')">Mark as NOT ready</button>`
+    : `<button class="btn btn-ready-off" onclick="toggleEvalReady('${traceId}')">Mark ready for eval</button>`;
+
+  const title = extractTitle(t.response);
 
   document.getElementById('detail').innerHTML = `
     <div class="detail-hd">
-      <div class="detail-url">
-        <a href="${esc(t.url || '')}" target="_blank" rel="noopener">${esc(t.url || '(no url)')}</a>
+      <div class="detail-hd-row">
+        <div style="flex:1;min-width:0">
+          <div class="detail-title">${esc(title)}</div>
+          <a href="${esc(t.url || '')}" target="_blank" rel="noopener" class="detail-url-link">${esc(t.url || '(no url)')}</a>
+        </div>
       </div>
-      <span class="detail-tid">${traceId}</span>
-      ${readyBtn}
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-danger" onclick="deleteTrace('${traceId}')" title="Delete this trace from the dataset">🗑 Delete</button>
+        ${readyBtn}
+      </div>
     </div>
     <div class="tabs">${tabsHtml}</div>
     <div class="detail-body">${panelsHtml}</div>
@@ -810,33 +842,37 @@ function cancelAdd(traceId, i) {
   renderDetail(traceId);
 }
 
-// ── Export ─────────────────────────────────────────────────────────────────────
+// ── Save helpers ───────────────────────────────────────────────────────────────
 
-async function exportRubrics() {
+async function saveRubricsToDisk(backup = false) {
   const merged = new Map(savedRubrics);
   for (const [tid, rubrics] of editedRubrics) {
     if (rubrics.length > 0) merged.set(tid, rubrics);
     else merged.delete(tid);
   }
-
   const lines = [];
   for (const [traceId, rubrics] of merged) {
     lines.push(JSON.stringify({ trace_id: traceId, rubrics }));
   }
-  if (!lines.length) { alert('No rubrics to export.'); return; }
-  const content = lines.join('\n') + '\n';
+  const content = lines.join('\n') + (lines.length ? '\n' : '');
+  const url = backup ? '/save?backup=1' : '/save';
+  const resp = await fetch(url, {
+    method: 'POST',
+    body: content,
+    headers: { 'Content-Type': 'application/x-ndjson' },
+  });
+  return resp.json();
+}
 
+// ── Export ─────────────────────────────────────────────────────────────────────
+
+async function exportRubrics() {
   if (window.PRELOADED?.serverMode) {
-    // ── Server mode: POST directly to disk ──────────────────────────────────
-    const savePath = `${versionRelPath}/example_rubrics.jsonl`;
-    if (!confirm(`Save to:\n  ${savePath}\n\nThis overwrites the existing file. Continue?`)) return;
+    // Server mode: always save examples (eval_ready) + rubrics, no confirm needed
+    // (server auto-backs up files before writing)
     try {
-      const resp = await fetch('/save', {
-        method: 'POST',
-        body: content,
-        headers: { 'Content-Type': 'application/x-ndjson' },
-      });
-      const result = await resp.json();
+      await saveExamples(true);
+      const result = await saveRubricsToDisk(true);
       if (result.ok) {
         commitEdits();
         showSaveNotification('Saved to disk ✓');
@@ -846,41 +882,55 @@ async function exportRubrics() {
     } catch (e) {
       alert(`Save failed: ${e}`);
     }
-  } else {
-    // ── Manual mode: save via File System Access API or browser download ─────
-    const savePath = versionRelPath
-      ? `${versionRelPath}/example_rubrics.jsonl`
-      : 'eval/data/<version>/example_rubrics.jsonl';
-
-    if (typeof showSaveFilePicker !== 'undefined') {
-      // Modern browsers (Chrome/Edge): native save dialog
-      try {
-        const handle = await showSaveFilePicker({
-          suggestedName: 'example_rubrics.jsonl',
-          types: [{ description: 'JSONL', accept: { 'application/x-ndjson': ['.jsonl'] } }],
-        });
-        const writable = await handle.createWritable();
-        await writable.write(content);
-        await writable.close();
-        commitEdits();
-        showSaveNotification('Saved ✓');
-        return;
-      } catch (e) {
-        if (e.name === 'AbortError') return; // user cancelled dialog
-        // fall through to download
-      }
-    }
-
-    // Fallback: browser download
-    if (!confirm(`Download example_rubrics.jsonl.\n\nAfter downloading, move the file to:\n  ${savePath}\n\nContinue?`)) return;
-    const blob = new Blob([content], { type: 'application/x-ndjson' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'example_rubrics.jsonl';
-    a.click();
-    URL.revokeObjectURL(a.href);
-    commitEdits();
+    return;
   }
+
+  // Non-server mode: build content for download
+  const merged = new Map(savedRubrics);
+  for (const [tid, rubrics] of editedRubrics) {
+    if (rubrics.length > 0) merged.set(tid, rubrics);
+    else merged.delete(tid);
+  }
+  const lines = [];
+  for (const [traceId, rubrics] of merged) {
+    lines.push(JSON.stringify({ trace_id: traceId, rubrics }));
+  }
+  if (!lines.length) { alert('No rubrics to export.'); return; }
+  const content = lines.join('\n') + '\n';
+
+  // ── Manual mode: save via File System Access API or browser download ───────
+  const savePath = versionRelPath
+    ? `${versionRelPath}/example_rubrics.jsonl`
+    : 'eval/data/<version>/example_rubrics.jsonl';
+
+  if (typeof showSaveFilePicker !== 'undefined') {
+    // Modern browsers (Chrome/Edge): native save dialog
+    try {
+      const handle = await showSaveFilePicker({
+        suggestedName: 'example_rubrics.jsonl',
+        types: [{ description: 'JSONL', accept: { 'application/x-ndjson': ['.jsonl'] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      commitEdits();
+      showSaveNotification('Saved ✓');
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return; // user cancelled dialog
+      // fall through to download
+    }
+  }
+
+  // Fallback: browser download
+  if (!confirm(`Download example_rubrics.jsonl.\n\nAfter downloading, move the file to:\n  ${savePath}\n\nContinue?`)) return;
+  const blob = new Blob([content], { type: 'application/x-ndjson' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'example_rubrics.jsonl';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  commitEdits();
 }
 
 function commitEdits() {
@@ -890,6 +940,7 @@ function commitEdits() {
   }
   editedRubrics.clear();
   updateUnsavedBadge();
+  updateHeaderCounts();
   renderList();
   if (selectedId) renderDetail(selectedId);
 }
@@ -907,6 +958,14 @@ function showSaveNotification(msg) {
 }
 
 // ── Utils ──────────────────────────────────────────────────────────────────────
+
+function extractTitle(response) {
+  if (!response) return '(no summary)';
+  const text = response.replace(/<[^>]+>/g, '').trim();
+  const firstLine = text.split('\n').find(l => l.trim()) || '';
+  const title = firstLine.trim();
+  return title.length > 90 ? title.slice(0, 87) + '…' : (title || '(no summary)');
+}
 
 function ratingBadge(val) {
   if (val === null || val === undefined) return '<span class="badge b-none">—</span>';
@@ -928,6 +987,40 @@ function toStr(v) {
 function fmtLen(s) {
   if (!s) return '';
   return s.length < 1000 ? `${s.length}c` : `${(s.length / 1000).toFixed(1)}k`;
+}
+
+// ── Delete trace ───────────────────────────────────────────────────────────────
+
+async function deleteTrace(traceId) {
+  const t = traces.find(x => x.trace_id === traceId);
+  const title = extractTitle(t?.response);
+  if (!confirm(`Delete this trace from the dataset?\n\n"${title}"\n\nAll associated rubrics will also be removed. A backup will be made automatically.`)) return;
+
+  const hadRubrics = savedRubrics.has(traceId) || editedRubrics.has(traceId);
+
+  traces = traces.filter(x => x.trace_id !== traceId);
+  evalReady.delete(traceId);
+  savedRubrics.delete(traceId);
+  editedRubrics.delete(traceId);
+
+  if (selectedId === traceId) {
+    selectedId = null;
+    document.getElementById('detail').innerHTML = '<div class="empty-st">Select a trace to view details</div>';
+  }
+
+  updateHeaderCounts();
+  updateUnsavedBadge();
+  renderList();
+
+  if (serverMode) {
+    try {
+      await saveExamples();
+      if (hadRubrics) await saveRubricsToDisk();
+      showSaveNotification('Trace deleted ✓');
+    } catch (e) {
+      alert(`Delete failed to save: ${e}`);
+    }
+  }
 }
 
 // ── Unsaved changes guard ───────────────────────────────────────────────────────

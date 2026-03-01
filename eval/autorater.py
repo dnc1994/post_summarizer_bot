@@ -155,7 +155,7 @@ def main():
     parser = argparse.ArgumentParser(description="Rate a candidate prompt against eval rubrics.")
     parser.add_argument("--version", required=True, help="Dataset version (e.g. v1)")
     parser.add_argument("--prompt-file", required=True, help="Prompt .txt file with {text} placeholder")
-    parser.add_argument("--dataset", default=None, help="Override traces.jsonl path")
+    parser.add_argument("--dataset", default=None, help="Override examples.jsonl path")
     parser.add_argument("--rubrics", default=None, help="Override rubrics.json path")
     parser.add_argument("--example-rubrics", default=None, help="Override example_rubrics.jsonl path")
     parser.add_argument("--output", default=None, help="Override output JSON path")
@@ -163,7 +163,7 @@ def main():
     args = parser.parse_args()
 
     data_dir = Path(__file__).parent / "data" / args.version
-    dataset_path = Path(args.dataset) if args.dataset else data_dir / "traces.jsonl"
+    dataset_path = Path(args.dataset) if args.dataset else data_dir / "examples.jsonl"
     rubrics_path = Path(args.rubrics) if args.rubrics else data_dir / "global_rubrics.jsonl"
     example_rubrics_path = Path(args.example_rubrics) if args.example_rubrics else data_dir / "example_rubrics.jsonl"
 
@@ -184,19 +184,14 @@ def main():
     traces = load_jsonl(dataset_path)
     traces = [t for t in traces if t.get("article_text")]
 
-    # Filter by eval_ready from examples.jsonl
-    examples_path = data_dir / "examples.jsonl"
-    if examples_path.exists():
-        examples_meta = load_jsonl(examples_path)
-        eval_ready_ids = {e["trace_id"] for e in examples_meta if e.get("eval_ready")}
-        if eval_ready_ids:
-            original_count = len(traces)
-            traces = [t for t in traces if t["trace_id"] in eval_ready_ids]
-            print(f"Filtered to {len(traces)} eval-ready trace(s) (of {original_count} total)")
-        else:
-            print("Warning: examples.jsonl has no eval_ready entries — evaluating all traces")
+    # Filter by eval_ready field embedded in each trace record
+    eval_ready_ids = {t["trace_id"] for t in traces if t.get("eval_ready")}
+    if eval_ready_ids:
+        original_count = len(traces)
+        traces = [t for t in traces if t["trace_id"] in eval_ready_ids]
+        print(f"Filtered to {len(traces)} eval-ready trace(s) (of {original_count} total)")
     else:
-        print("Note: examples.jsonl not found — evaluating all traces")
+        print("Note: no eval_ready traces found — evaluating all traces")
 
     if args.limit:
         traces = traces[:args.limit]

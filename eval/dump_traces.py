@@ -5,7 +5,7 @@ Usage:
     uv run python eval/dump_traces.py --version v1 [--limit N]
 
 Idempotent: skips trace IDs already present in the dataset.
-Output: eval/data/<version>/traces.jsonl
+Output: eval/data/<version>/examples.jsonl
 """
 
 import argparse
@@ -20,11 +20,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def load_existing_ids(traces_file: Path) -> set[str]:
-    if not traces_file.exists():
+def load_existing_ids(examples_file: Path) -> set[str]:
+    if not examples_file.exists():
         return set()
     ids = set()
-    with open(traces_file) as f:
+    with open(examples_file) as f:
         for line in f:
             line = line.strip()
             if line:
@@ -138,11 +138,11 @@ def main():
     args = parser.parse_args()
 
     data_dir = Path(__file__).parent / "data" / args.version
-    traces_file = data_dir / "traces.jsonl"
+    examples_file = data_dir / "examples.jsonl"
     data_dir.mkdir(parents=True, exist_ok=True)
 
     lf = get_langfuse_client()
-    existing_ids = load_existing_ids(traces_file)
+    existing_ids = load_existing_ids(examples_file)
     print(f"Version: {args.version} | Existing traces: {len(existing_ids)}", flush=True)
 
     new_records = []
@@ -191,12 +191,12 @@ def main():
 
         page += 1
 
-    with open(traces_file, "a") as f:
+    with open(examples_file, "a") as f:
         for record in new_records:
             f.write(json.dumps(record) + "\n")
 
     print(f"\nDone. {len(new_records)} new trace(s) written, {skipped} skipped.")
-    print(f"Dataset: {traces_file}")
+    print(f"Dataset: {examples_file}")
 
 
 if __name__ == "__main__":
