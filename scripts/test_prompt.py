@@ -1,11 +1,15 @@
 import os
 import asyncio
 import sys
+
+# Ensure the root directory is in sys.path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import trafilatura
 from google import genai
 from dotenv import load_dotenv
 
-from prompts import SUMMARIZATION_PROMPT_TEMPLATE
+from post_summarizer_bot.prompts import SUMMARIZATION_PROMPT_TEMPLATE
 
 # Load environment variables
 load_dotenv()
@@ -60,4 +64,4 @@ if __name__ == "__main__":
         target_url = sys.argv[1]
         asyncio.run(test_summary(target_url))
     else:
-        print("Usage: uv run python test_prompt.py <URL>")
+        print("Usage: uv run python scripts/test_prompt.py <URL>")

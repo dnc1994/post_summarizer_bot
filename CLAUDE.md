@@ -20,18 +20,21 @@ uv venv && source .venv/bin/activate
 uv pip install -r requirements.txt
 
 # Run the bot
-uv run main.py
+uv run python -m post_summarizer_bot.main
 
 # Debug scraping for a specific URL
-uv run python debug_scrape.py "https://example.com/article"
+uv run python scripts/debug_scrape.py "https://example.com/article"
 
 # Test prompt output end-to-end (scrape + summarize)
-uv run python test_prompt.py "https://example.com/article"
+uv run python scripts/test_prompt.py "https://example.com/article"
 ```
 
 ## Architecture
 
-The bot is split across two modules: `main.py` (Telegram wiring, handlers, state) and `summarizer.py` (Gemini call + Langfuse tracing). Prompt template lives in `prompts.py`.
+The functional bot code lives in the `post_summarizer_bot/` package:
+- `main.py`: Telegram wiring, handlers, state
+- `summarizer.py`: Gemini call + Langfuse tracing
+- `prompts.py`: Prompt template
 
 **Data flow:**
 1. The bot listens to Channel A via `python-telegram-bot` polling (`filters.UpdateType.CHANNEL_POST`)

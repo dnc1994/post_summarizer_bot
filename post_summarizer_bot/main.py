@@ -10,7 +10,7 @@ from telegram.error import Conflict
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CallbackQueryHandler, CommandHandler, filters
 from dotenv import load_dotenv
 
-import summarizer
+from . import summarizer
 
 # Load environment variables
 load_dotenv()

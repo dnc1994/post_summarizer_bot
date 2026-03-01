@@ -56,17 +56,17 @@ To keep your bot safe and prevent unwanted API costs:
 
 4. **Run:**
    ```bash
-   uv run main.py
+   uv run python -m post_summarizer_bot.main
    ```
 
 5. **Debug Scraping:**
    ```bash
-   uv run python debug_scrape.py "https://example.com/article"
+   uv run python scripts/debug_scrape.py "https://example.com/article"
    ```
 
 6. **Test Prompt Tuning:**
    ```bash
-   uv run python test_prompt.py "https://example.com/article"
+   uv run python scripts/test_prompt.py "https://example.com/article"
    ```
 
 ## 📊 Langfuse Observability (Optional)
@@ -102,7 +102,7 @@ The bot is a **long-running process** and needs to stay active 24/7 to poll Tele
 ### Option 2: Render
 1. Create a **Background Worker** (not a web service).
 2. Connect your GitHub repository.
-3. Set the start command to: `python main.py`.
+3. Set the start command to: `python -m post_summarizer_bot.main`.
 4. Add your environment variables in the **Environment** tab.
 
 ### Option 3: Fly.io
@@ -119,7 +119,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=/path/to/bot
-ExecStart=/path/to/venv/bin/python main.py
+ExecStart=/path/to/venv/bin/python -m post_summarizer_bot.main
 EnvironmentFile=/path/to/bot/.env
 Restart=always
 
@@ -129,8 +129,8 @@ WantedBy=multi-user.target
 
 ## 🛠️ Customization
 
-- **Prompt Tuning:** Edit `SUMMARIZATION_PROMPT_TEMPLATE` in `prompts.py`. Use `test_prompt.py` to preview changes immediately.
-- **Model Choice:** The model is `gemini-3-flash-preview` (set as `MODEL_NAME` in `main.py`).
+- **Prompt Tuning:** Edit `SUMMARIZATION_PROMPT_TEMPLATE` in `post_summarizer_bot/prompts.py`. Use `scripts/test_prompt.py` to preview changes immediately.
+- **Model Choice:** The model is `gemini-3-flash-preview` (set as `MODEL_NAME` in `post_summarizer_bot/main.py`).
 
 ## 📊 Eval / Prompt Tuning Workflow
 

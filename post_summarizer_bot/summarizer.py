@@ -2,7 +2,7 @@ import logging
 
 from google import genai
 from google.genai import errors as genai_errors
-from prompts import SUMMARIZATION_PROMPT_TEMPLATE
+from .prompts import SUMMARIZATION_PROMPT_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
