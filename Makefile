@@ -4,6 +4,10 @@ eval-dump:
 	@test -n "$(VERSION)" || (echo "Error: Usage: make eval-dump VERSION=v1" && exit 1)
 	uv run python eval/dump_traces.py --version $(VERSION)
 
+eval-data-viewer:
+	@test -n "$(VERSION)" || (echo "Error: Usage: make eval-data-viewer VERSION=v1" && exit 1)
+	uv run python eval/launch_data_viewer.py --version $(VERSION)
+
 eval-rubrics:
 	@test -n "$(VERSION)" || (echo "Error: Usage: make eval-rubrics VERSION=v1" && exit 1)
 	uv run python eval/gen_rubrics.py --version $(VERSION)
@@ -21,7 +25,3 @@ eval-show:
 	@test -n "$(VERSION)" || (echo "Error: Usage: make eval-show VERSION=v1 TRACE=<id-prefix>" && exit 1)
 	@test -n "$(TRACE)" || (echo "Error: Usage: make eval-show VERSION=v1 TRACE=<id-prefix>" && exit 1)
 	uv run python eval/view_traces.py --version $(VERSION) --trace-id $(TRACE)
-
-eval-viewer:
-	@test -n "$(VERSION)" || (echo "Error: Usage: make eval-viewer VERSION=v1" && exit 1)
-	uv run python eval/launch_data_viewer.py --version $(VERSION)
