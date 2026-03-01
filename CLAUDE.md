@@ -12,6 +12,10 @@ For any complex task where plan mode is activated, always write the plan to a Ma
 
 This creates a paper trail, makes it easy to resume interrupted work, and allows other agents to pick up specific sub-tasks.
 
+## Wrapping Up Changes
+
+Before committing after any significant change, always read **both** `README.md` and `CLAUDE.md` in full and update whichever sections are affected. Do not assume only one of them needs updating.
+
 ## Commands
 
 ```bash
