@@ -82,6 +82,8 @@ eval/
   view_traces.py            # Terminal viewer (list + detail)
   launch_data_viewer.py     # Serve the Eval Data Viewer with direct-to-disk save
   eval_data_viewer.html     # Self-contained HTML viewer / rubric editor
+  launch_result_viewer.py   # Serve the Eval Result Viewer for a result JSON file
+  eval_result_viewer.html   # Self-contained HTML viewer for autorater results
   prompts/
     v1_baseline.txt         # Copy of current prompt
   data/
@@ -101,6 +103,7 @@ make eval-rate    VERSION=v1 PROMPT=eval/prompts/v1_baseline.txt  # Score a prom
 make eval-view    VERSION=v1               # Terminal list view
 make eval-show    VERSION=v1 TRACE=<id>   # Terminal detail view for one trace
 make eval-viewer  VERSION=v1               # Launch Eval Data Viewer (opens browser)
+make eval-result-viewer RESULT=eval/data/v1/results/run.json  # Launch Result Viewer
 ```
 
 **Two rubric tiers:**
@@ -110,6 +113,8 @@ make eval-viewer  VERSION=v1               # Launch Eval Data Viewer (opens brow
 **"Ready for eval"**: each trace record in `examples.jsonl` carries an `eval_ready: true` field when marked. Toggle in the Eval Data Viewer rewrites `examples.jsonl` in place. `autorater.py` filters to only eval-ready traces when any are marked.
 
 **Eval Data Viewer** (`make eval-viewer`): runs a local HTTP server, opens browser. Tabs: Article | Preview | Response | Prompt | Rubrics | Global Rubrics | Metadata. Supports editing example-specific rubrics and toggling "ready for eval", both saved directly to disk.
+
+**Eval Result Viewer** (`make eval-result-viewer RESULT=<path>`): read-only viewer for an autorater result JSON. Sidebar shows examples with colored rubric dots. Detail pane has 5 tabs: Article | Preview | Response | Rubrics | LLM Calls. Click a rubric in the Rubrics tab or a header badge to filter the sidebar to failing examples. The autorater prints the exact `make` command to launch the viewer after each run.
 
 **Eval scripts use `gemini-3-flash-preview`** — same model as the production bot.
 

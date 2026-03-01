@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Eval Result Viewer</title>
+<!-- __PRELOADED__ -->
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --muted: #64748b;
+  --subtle: #94a3b8;
+  --accent: #3b82f6;
+  --accent-bg: #eff6ff;
+  --green: #16a34a;
+  --green-bg: #dcfce7;
+  --green-border: #86efac;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.header {
+  background: #1e293b;
+  color: #f1f5f9;
+  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.header h1 { font-size: 14px; font-weight: 600; }
+
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.meta-chip {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+.meta-chip b { color: #cbd5e1; font-weight: 500; }
+
+.version-pill {
+  background: rgba(255,255,255,0.15);
+  color: #f1f5f9;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-family: monospace;
+}
+
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #f59e0b22;
+  border: 1px solid #f59e0b66;
+  color: #fbbf24;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  max-width: 260px;
+}
+.filter-pill-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filter-clear {
+  background: none;
+  border: none;
+  color: #fbbf24;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.filter-clear:hover { color: #fff; }
+
+/* ── Badges ──────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.b-pass { background: #dcfce7; color: #15803d; }
+.b-fail { background: #fee2e2; color: #dc2626; }
+.b-none { background: #f1f5f9; color: var(--muted); }
+.b-warn { background: #fef3c7; color: #b45309; }
+.b-dry  { background: #e0e7ff; color: #4338ca; }
+
+/* Rubric dot */
+.rdot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.rdot-pass { background: #22c55e; }
+.rdot-fail { background: #ef4444; }
+.rdot-none { background: #cbd5e1; }
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.sidebar {
+  width: 290px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+.sidebar-hd {
+  padding: 6px 11px;
+  font-size: 11px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.trace-list { flex: 1; overflow-y: auto; }
+
+.trace-item {
+  padding: 8px 11px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+}
+.trace-item:hover { background: #f8fafc; }
+.trace-item.active {
+  background: var(--accent-bg);
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+}
+.ti-top { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; flex-wrap: wrap; }
+.ti-tid { font-family: monospace; font-size: 11px; color: var(--muted); }
+.ti-dots { display: flex; gap: 3px; align-items: center; }
+.ti-url {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Detail ──────────────────────────────────────────────────────────────── */
+.detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+}
+.empty-st {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--subtle);
+  font-size: 13px;
+}
+
+.detail-hd {
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.detail-hd-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.detail-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+  margin-bottom: 3px;
+}
+.detail-url-link {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+.detail-url-link:hover { text-decoration: underline; }
+.detail-tid { font-family: monospace; font-size: 10px; color: var(--muted); white-space: nowrap; }
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+  padding: 0 15px;
+  overflow-x: auto;
+}
+.tab {
+  padding: 7px 11px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+.tab:hover:not(.active) { color: var(--text); }
+.tab-len { font-size: 10px; color: var(--subtle); margin-left: 3px; }
+
+.detail-body { flex: 1; overflow-y: auto; }
+.tab-panel { display: none; padding: 14px 15px; }
+.tab-panel.active { display: block; }
+
+.text-block {
+  font-size: 12.5px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 11px 13px;
+}
+
+.rendered-block {
+  font-size: 13.5px;
+  line-height: 1.7;
+  word-break: break-word;
+  white-space: pre-wrap;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 13px 15px;
+  max-width: 540px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.rendered-block b  { font-weight: 700; }
+.rendered-block i  { font-style: italic; }
+.rendered-block u  { text-decoration: underline; }
+.rendered-block s  { text-decoration: line-through; }
+.rendered-block a  { color: var(--accent); text-decoration: none; }
+.rendered-block a:hover { text-decoration: underline; }
+.rendered-block code { font-family: monospace; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+.rendered-block pre  { background: #f1f5f9; border-radius: 6px; padding: 10px 12px; overflow-x: auto; font-size: 12px; line-height: 1.6; }
+.rendered-block blockquote { border-left: 3px solid #cbd5e1; margin: 6px 0; padding-left: 10px; color: var(--muted); }
+
+/* ── Rubrics table ───────────────────────────────────────────────────────── */
+.rubric-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.rubric-table th {
+  text-align: left;
+  padding: 5px 8px;
+  border-bottom: 2px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.rubric-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.rubric-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.rubric-row:hover { background: #f8fafc; }
+.rubric-row.filter-active { background: #fef9c3; }
+.rubric-row.filter-active:hover { background: #fef08a; }
+.rubric-id { font-family: monospace; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.rubric-stmt { line-height: 1.5; }
+.rubric-section-hd {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 12px 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.rubric-section-hd:first-child { margin-top: 0; }
+
+/* ── LLM Calls tab ───────────────────────────────────────────────────────── */
+.llm-call-card {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.llm-call-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+.llm-call-header:hover { background: #f1f5f9; }
+.llm-call-title { font-size: 12px; font-weight: 500; flex: 1; }
+.llm-call-body { padding: 10px 11px; }
+
+.collapsible-toggle {
+  font-size: 11px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+.collapsible-toggle:hover { background: var(--border); }
+
+.prompt-section { margin-bottom: 8px; }
+.prompt-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.collapsible-content { display: none; }
+.collapsible-content.open { display: block; }
+
+.verdict-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  margin-bottom: 6px;
+}
+.verdict-raw {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+
+.empty-tab-msg {
+  font-size: 12px;
+  color: var(--subtle);
+  font-style: italic;
+}
+
+/* ── File picker ─────────────────────────────────────────────────────────── */
+.file-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.btn-ghost { background: rgba(255,255,255,0.12); color: #f1f5f9; }
+.btn-ghost:hover { background: rgba(255,255,255,0.2); }
+.btn-sm { padding: 2px 7px; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <h1>Eval Result Viewer</h1>
+  <div class="header-meta" id="header-meta">
+    <span style="font-size:11px;color:#64748b">No result loaded</span>
+  </div>
+  <div id="filter-pill-container"></div>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-hd" id="sidebar-hd">No examples</div>
+    <div class="trace-list" id="trace-list">
+      <div style="padding:22px;text-align:center;color:#94a3b8;font-size:12px">
+        Load a result JSON to begin
+      </div>
+    </div>
+  </div>
+  <div class="detail" id="detail">
+    <div class="empty-st">Select an example to view details</div>
+  </div>
+</div>
+
+<script>
+// ── State ───────────────────────────────────────────────────────────────────────
+
+let resultData = null;   // full parsed JSON
+let examples = [];       // resultData.examples
+let globalRubrics = [];  // resultData.global_rubrics
+let selectedId = null;
+let activeTab = 'article';
+let filterRubricId = null;  // rubric id being filtered, or null
+
+// ── Startup ─────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof window.PRELOADED !== 'undefined') {
+    loadResult(window.PRELOADED);
+  } else {
+    initFilePicker();
+  }
+});
+
+function initFilePicker() {
+  const meta = document.getElementById('header-meta');
+  meta.innerHTML = `
+    <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+      Load result JSON
+      <input type="file" accept=".json" style="display:none" onchange="handleFileLoad(event)">
+    </label>`;
+}
+
+function handleFileLoad(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      loadResult(data);
+    } catch (err) {
+      alert('Failed to parse JSON: ' + err);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function loadResult(data) {
+  resultData = data;
+  examples = data.examples || [];
+  globalRubrics = data.global_rubrics || [];
+
+  updateHeader(data);
+  renderList();
+}
+
+function updateHeader(data) {
+  const meta = document.getElementById('header-meta');
+
+  const promptFile = data.prompt_file || 'unknown';
+  const judgeModel = data.judge_model || 'unknown';
+  const ts = data.timestamp || '';
+  const nEx = data.n_examples || examples.length;
+  const principleOverall = data.principle?.overall_pass_rate;
+
+  const overallBadge = principleOverall !== undefined
+    ? `<span class="badge ${principleOverall >= 0.8 ? 'b-pass' : principleOverall >= 0.5 ? 'b-warn' : 'b-fail'}">${(principleOverall * 100).toFixed(0)}% pass</span>`
+    : '';
+
+  // Per-rubric badges
+  const perRubricBadges = (data.principle?.per_rubric || []).map(r =>
+    `<span title="${esc(r.statement)}" class="badge ${r.pass_rate >= 0.8 ? 'b-pass' : r.pass_rate >= 0.5 ? 'b-warn' : 'b-fail'}" style="cursor:pointer" onclick="toggleFilter('${r.id}')">${esc(r.id)}: ${(r.pass_rate*100).toFixed(0)}%</span>`
+  ).join('');
+
+  const promptName = promptFile.split('/').pop();
+  meta.innerHTML = `
+    <span class="version-pill">${esc(data.version || '')}</span>
+    <span class="meta-chip"><b>Prompt:</b> ${esc(promptName)}</span>
+    <span class="meta-chip"><b>Judge:</b> ${esc(judgeModel)}</span>
+    <span class="meta-chip"><b>n=</b>${nEx}</span>
+    ${overallBadge}
+    ${perRubricBadges}`;
+}
+
+// ── Filter ───────────────────────────────────────────────────────────────────────
+
+function setFilter(rubricId) {
+  filterRubricId = rubricId;
+  const rubric = globalRubrics.find(r => r.id === rubricId);
+  const statement = rubric?.statement || '';
+  const truncated = statement.length > 50 ? statement.slice(0, 47) + '…' : statement;
+  document.getElementById('filter-pill-container').innerHTML = `
+    <div class="filter-pill">
+      <span class="filter-pill-text">Filter: ${esc(rubricId)} — ${esc(truncated)}</span>
+      <button class="filter-clear" onclick="clearFilter()" title="Clear filter">✕</button>
+    </div>`;
+  renderList();
+}
+
+function toggleFilter(rubricId) {
+  if (filterRubricId === rubricId) {
+    clearFilter();
+  } else {
+    setFilter(rubricId);
+  }
+  if (selectedId) renderDetail(selectedId);
+}
+
+function clearFilter() {
+  filterRubricId = null;
+  document.getElementById('filter-pill-container').innerHTML = '';
+  renderList();
+}
+
+// ── List ─────────────────────────────────────────────────────────────────────────
+
+function renderList() {
+  let visible = examples;
+  if (filterRubricId) {
+    visible = examples.filter(ex => {
+      const res = (ex.principle_results || []).find(r => r.id === filterRubricId);
+      return res && !res.pass;
+    });
+  }
+
+  const count = visible.length;
+  const total = examples.length;
+  document.getElementById('sidebar-hd').textContent = filterRubricId
+    ? `${count} failing / ${total} total`
+    : `${total} example${total !== 1 ? 's' : ''}`;
+
+  const el = document.getElementById('trace-list');
+  if (!visible.length) {
+    el.innerHTML = filterRubricId
+      ? '<div style="padding:22px;text-align:center;color:#94a3b8;font-size:12px">No examples fail this rubric</div>'
+      : '<div style="padding:22px;text-align:center;color:#94a3b8;font-size:12px">No examples loaded</div>';
+    return;
+  }
+
+  const rubricIds = globalRubrics.map(r => r.id);
+
+  el.innerHTML = visible.map(ex => {
+    const isActive = ex.trace_id === selectedId;
+    const url = (ex.url || '').replace(/^https?:\/\//, '');
+
+    // Build dots for each global rubric
+    const dots = rubricIds.map(rid => {
+      const res = (ex.principle_results || []).find(r => r.id === rid);
+      if (!res) return `<span class="rdot rdot-none" title="${esc(rid)}: n/a"></span>`;
+      return res.pass
+        ? `<span class="rdot rdot-pass" title="${esc(rid)}: pass"></span>`
+        : `<span class="rdot rdot-fail" title="${esc(rid)}: fail"></span>`;
+    }).join('');
+
+    return `<div class="trace-item${isActive ? ' active' : ''}" onclick="select('${ex.trace_id}')">
+      <div class="ti-top">
+        <span class="ti-tid">${ex.trace_id.slice(0, 8)}</span>
+        <div class="ti-dots">${dots}</div>
+      </div>
+      <div class="ti-url">${esc(url) || '<span style="color:#94a3b8">no url</span>'}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Detail ───────────────────────────────────────────────────────────────────────
+
+function select(traceId) {
+  selectedId = traceId;
+  renderList();
+  renderDetail(traceId);
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  if (selectedId) renderDetail(selectedId);
+}
+
+function renderDetail(traceId) {
+  const ex = examples.find(x => x.trace_id === traceId);
+  if (!ex) return;
+
+  const TABS = [
+    { id: 'article',   label: 'Article' },
+    { id: 'preview',   label: 'Preview' },
+    { id: 'response',  label: 'Response' },
+    { id: 'rubrics',   label: 'Rubrics' },
+    { id: 'llm_calls', label: 'LLM Calls' },
+  ];
+
+  const tabsHtml = TABS.map(tab => `
+    <div class="tab${activeTab === tab.id ? ' active' : ''}" onclick="switchTab('${tab.id}')">
+      ${tab.label}
+    </div>`).join('');
+
+  const panelsHtml = TABS.map(tab => {
+    const isActive = activeTab === tab.id;
+    const cls = `tab-panel${isActive ? ' active' : ''}`;
+
+    if (tab.id === 'article') {
+      return `<div class="${cls}"><div class="text-block">${esc(ex.article_text || '(no article text)')}</div></div>`;
+    }
+    if (tab.id === 'preview') {
+      return `<div class="${cls}"><div class="rendered-block">${ex.response || '<span style="color:#94a3b8">(empty)</span>'}</div></div>`;
+    }
+    if (tab.id === 'response') {
+      return `<div class="${cls}"><div class="text-block">${esc(ex.response || '(empty)')}</div></div>`;
+    }
+    if (tab.id === 'rubrics') {
+      return `<div class="${cls}">${buildRubricsTab(ex)}</div>`;
+    }
+    if (tab.id === 'llm_calls') {
+      return `<div class="${cls}">${buildLlmCallsTab(ex)}</div>`;
+    }
+    return `<div class="${cls}"></div>`;
+  }).join('');
+
+  const title = extractTitle(ex.response);
+
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-hd">
+      <div class="detail-hd-row">
+        <div style="flex:1;min-width:0">
+          <div class="detail-title">${esc(title)}</div>
+          <a href="${esc(ex.url || '')}" target="_blank" rel="noopener" class="detail-url-link">${esc(ex.url || '(no url)')}</a>
+        </div>
+        <span class="detail-tid">${esc(traceId)}</span>
+      </div>
+    </div>
+    <div class="tabs">${tabsHtml}</div>
+    <div class="detail-body">${panelsHtml}</div>
+  `;
+}
+
+function buildRubricsTab(ex) {
+  const principleResults = ex.principle_results || [];
+  const exampleResults = ex.example_results || [];
+
+  // Build lookup for global rubric statements
+  const globalById = {};
+  for (const r of globalRubrics) globalById[r.id] = r.statement || '';
+
+  let html = '';
+
+  if (principleResults.length) {
+    html += `<div class="rubric-section-hd">Principle Rubrics</div>`;
+    html += `<table class="rubric-table">
+      <thead><tr><th>ID</th><th>Statement</th><th>Verdict</th></tr></thead>
+      <tbody>`;
+    for (const r of principleResults) {
+      const stmt = globalById[r.id] || '—';
+      const isFilterActive = filterRubricId === r.id;
+      const badge = r.pass
+        ? '<span class="badge b-pass">PASS</span>'
+        : '<span class="badge b-fail">FAIL</span>';
+      html += `<tr class="rubric-row${isFilterActive ? ' filter-active' : ''}" onclick="toggleFilter('${r.id}')">
+        <td class="rubric-id">${esc(r.id)}</td>
+        <td class="rubric-stmt">${esc(stmt)}</td>
+        <td>${badge}</td>
+      </tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+
+  if (exampleResults.length) {
+    html += `<div class="rubric-section-hd" style="margin-top:16px">Example-Specific Rubrics</div>`;
+    html += `<table class="rubric-table">
+      <thead><tr><th>ID</th><th>Verdict</th></tr></thead>
+      <tbody>`;
+    for (const r of exampleResults) {
+      const badge = r.pass
+        ? '<span class="badge b-pass">PASS</span>'
+        : '<span class="badge b-fail">FAIL</span>';
+      html += `<tr>
+        <td class="rubric-id">${esc(r.id)}</td>
+        <td>${badge}</td>
+      </tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+
+  if (!principleResults.length && !exampleResults.length) {
+    html = '<p class="empty-tab-msg">No rubric results for this example.</p>';
+  } else {
+    html += `<p style="margin-top:10px;font-size:11px;color:var(--subtle)">Click a principle rubric row to filter the sidebar.</p>`;
+  }
+
+  return html;
+}
+
+
+function buildLlmCallsTab(ex) {
+  const calls = ex.llm_calls || [];
+  if (!calls.length) return '<p class="empty-tab-msg">No LLM call logs for this example.</p>';
+
+  let html = '';
+  calls.forEach((call, idx) => {
+    if (call.type === 'summary_generation') {
+      html += buildSummaryCallCard(call, idx);
+    } else if (call.type === 'rubric_evaluation') {
+      html += buildRubricCallCard(call, idx);
+    }
+  });
+  return html;
+}
+
+function buildSummaryCallCard(call, idx) {
+  const isDry = call.dry_run;
+  const collapseId = `collapse-${idx}`;
+
+  let promptSection = '';
+  if (isDry) {
+    promptSection = `<div class="prompt-section"><span class="badge b-dry">DRY RUN — no prompt generated</span></div>`;
+  } else if (call.prompt) {
+    promptSection = `
+      <div class="prompt-section">
+        <div class="prompt-label">
+          Prompt
+          <button class="collapsible-toggle" onclick="toggleCollapse('${collapseId}')">show/hide</button>
+        </div>
+        <div class="collapsible-content" id="${collapseId}">
+          <div class="text-block" style="font-size:11.5px;max-height:300px;overflow-y:auto">${esc(call.prompt)}</div>
+        </div>
+      </div>`;
+  }
+
+  const responseSection = call.response
+    ? `<div class="prompt-section">
+        <div class="prompt-label">Generated Summary</div>
+        <div class="rendered-block" style="font-size:12.5px">${call.response || '(empty)'}</div>
+       </div>`
+    : '';
+
+  return `
+    <div class="llm-call-card">
+      <div class="llm-call-header">
+        <span class="llm-call-title">Summary Generation</span>
+        ${isDry ? '<span class="badge b-dry">DRY RUN</span>' : '<span class="badge b-none">Gemini</span>'}
+      </div>
+      <div class="llm-call-body">
+        ${promptSection}
+        ${responseSection}
+      </div>
+    </div>`;
+}
+
+function buildRubricCallCard(call, idx) {
+  const isDry = call.dry_run;
+  const collapseId = `collapse-${idx}`;
+  const passed = call.pass;
+
+  const badge = passed
+    ? '<span class="badge b-pass">YES — PASS</span>'
+    : '<span class="badge b-fail">NO — FAIL</span>';
+
+  let promptSection = '';
+  if (isDry) {
+    promptSection = `<div class="prompt-section"><span class="badge b-dry">DRY RUN — random verdict</span></div>`;
+  } else if (call.prompt) {
+    promptSection = `
+      <div class="prompt-section">
+        <div class="prompt-label">
+          Judge Prompt
+          <button class="collapsible-toggle" onclick="toggleCollapse('${collapseId}')">show/hide</button>
+        </div>
+        <div class="collapsible-content" id="${collapseId}">
+          <div class="text-block" style="font-size:11.5px;max-height:250px;overflow-y:auto">${esc(call.prompt)}</div>
+        </div>
+      </div>`;
+  }
+
+  const verdictRaw = call.verdict_raw
+    ? `<span class="verdict-raw">${esc(call.verdict_raw)}</span>`
+    : '';
+
+  return `
+    <div class="llm-call-card">
+      <div class="llm-call-header">
+        <span class="llm-call-title">Rubric: ${esc(call.rubric_id || '?')}</span>
+        ${isDry ? '<span class="badge b-dry">DRY RUN</span>' : ''}
+        ${badge}
+        ${verdictRaw}
+      </div>
+      <div class="llm-call-body">
+        ${promptSection}
+      </div>
+    </div>`;
+}
+
+function toggleCollapse(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('open');
+}
+
+// ── Utils ───────────────────────────────────────────────────────────────────────
+
+function extractTitle(response) {
+  if (!response) return '(no summary)';
+  const text = response.replace(/<[^>]+>/g, '').trim();
+  const firstLine = text.split('\n').find(l => l.trim()) || '';
+  const title = firstLine.trim();
+  return title.length > 90 ? title.slice(0, 87) + '…' : (title || '(no summary)');
+}
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>
