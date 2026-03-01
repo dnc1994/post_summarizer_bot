@@ -151,6 +151,9 @@ make eval-data-viewer VERSION=v1
 # 4. Score the baseline prompt
 make eval-rate VERSION=v1 PROMPT=eval/prompts/v1_baseline.txt
 
+# 4b. Inspect results visually (command is printed at the end of eval-rate)
+make eval-result-viewer RESULT=eval/data/v1/results/v1_baseline_<timestamp>.json
+
 # 5. Write a new prompt variant, then compare
 make eval-rate VERSION=v1 PROMPT=eval/prompts/v2.txt
 ```
@@ -161,6 +164,19 @@ make eval-rate VERSION=v1 PROMPT=eval/prompts/v2.txt
 - Edit example-specific rubrics — saved directly to `eval/data/v1/example_rubrics.jsonl` on disk
 - Toggle **"Ready for eval"** on each trace — `autorater.py` filters to only marked traces
 - Delete traces or export with automatic backup
+
+### HTML Eval Result Viewer
+
+After `make eval-rate` finishes it prints the exact command to open the viewer. Or run it manually:
+
+```bash
+make eval-result-viewer RESULT=eval/data/v1/results/run.json
+```
+
+Opens a read-only browser UI where you can:
+- Browse examples in the sidebar, with colored dots showing pass/fail per rubric
+- Click any rubric in the header or Rubrics tab to filter the sidebar to failing examples
+- Inspect the LLM Calls tab to see the exact prompts sent and raw verdicts returned
 
 ### Rubric Tiers
 
