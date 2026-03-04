@@ -2,7 +2,6 @@ import os
 import logging
 import re
 
-import trafilatura
 from google import genai
 from langfuse import Langfuse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -11,6 +10,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, Callb
 from dotenv import load_dotenv
 
 from . import summarizer
+from .scraper import scrape_content
 
 # Load environment variables
 load_dotenv()
@@ -80,28 +80,6 @@ def extract_url(text: str | None, entities=None) -> str | None:
         for entity in entities:
             if entity.type == "text_link" and entity.url:
                 return entity.url
-    return None
-
-def scrape_content(url):
-    """Scrapes the content of the URL using trafilatura."""
-    logger.info(f"Attempting to scrape URL: {url}")
-    try:
-        # Some sites block default scrapers; trafilatura's fetch_url is basic
-        downloaded = trafilatura.fetch_url(url)
-
-        if downloaded:
-            # favor_recall=True makes extraction less strict, helpful for non-standard blogs
-            text = trafilatura.extract(downloaded, favor_recall=True, include_comments=False)
-
-            if text:
-                logger.info(f"Successfully scraped {len(text)} characters from {url}")
-                return text
-            else:
-                logger.warning(f"Trafilatura failed to find article content in the HTML from {url}")
-        else:
-            logger.warning(f"Could not download content from {url} (HTTP error or blocking)")
-    except Exception as e:
-        logger.error(f"Error scraping {url}: {e}")
     return None
 
 def _retry_keyboard() -> InlineKeyboardMarkup:
