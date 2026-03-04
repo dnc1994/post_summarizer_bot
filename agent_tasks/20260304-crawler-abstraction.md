@@ -235,6 +235,6 @@ git commit -m "docs: update architecture and README for crawler abstraction"
 
 ## Todo
 
-- [ ] Task 1: Create `scraper.py`
-- [ ] Task 2: Wire into `main.py`
-- [ ] Task 3: Update documentation
+- [x] Task 1: Create `scraper.py`
+- [x] Task 2: Wire into `main.py`
+- [x] Task 3: Update documentation
