@@ -21,7 +21,10 @@ def scrape_defuddle(url: str) -> str | None:
             return None
         # Strip YAML frontmatter (--- ... ---)
         if text.startswith("---"):
-            end = text.find("\n---", 3)
+            # Only search for closing delimiter within first 2KB to avoid
+            # matching --- horizontal rules in the article body.
+            search_window = text[:2048]
+            end = search_window.find("\n---", 3)
             if end != -1:
                 text = text[end + 4:].strip()
         if not text:
@@ -52,7 +55,7 @@ def scrape_trafilatura(url: str) -> str | None:
         return None
 
 
-_CRAWLERS = [scrape_defuddle, scrape_trafilatura]
+_CRAWLERS = (scrape_defuddle, scrape_trafilatura)
 
 
 def scrape_content(url: str) -> str | None:
