@@ -5,7 +5,7 @@ A Telegram bot that monitors a source channel (**Channel A**), extracts links fr
 ## ✨ Features
 
 - **📡 Automated Monitoring:** Listens to every message in your designated source channel.
-- **🔍 Smart Extraction:** Automatically detects URLs and scrapes main content with a fallback "recall" mode for high accuracy.
+- **🔍 Smart Extraction:** Automatically detects URLs and scrapes main content via a crawler chain: [Defuddle](https://defuddle.md) (primary, Markdown output) → trafilatura (fallback).
 - **🧠 AI Summarization:** Powered by **Gemini 3 Flash Preview** for fast and intelligent summaries.
 - **🎨 Rich Formatting:** Delivers summaries in Telegram-compatible HTML with bold titles, blockquotes, and bullet points.
 - **🛡️ Security First:** Built-in **User ID filtering** to protect your API keys from unauthorized usage.
@@ -187,7 +187,7 @@ Opens a read-only browser UI where you can:
 
 ## ⚠️ Link Crawling Limitations
 
-The built-in scraper (`trafilatura`) works well for standard article pages but is **not robust enough for all sites**. It will often fail or return poor results for:
+The bot uses [Defuddle](https://defuddle.md) as its primary scraper (good for clean long-form pages) with `trafilatura` as a fallback, but this chain is **not robust enough for all sites**. It will often fail or return poor results for:
 
 - **Social media** (Twitter/X, Instagram, LinkedIn, etc.)
 - **Paywalled content** (NYT, WSJ, The Atlantic, etc.)

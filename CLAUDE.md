@@ -37,6 +37,7 @@ uv run python scripts/test_prompt.py "https://example.com/article"
 
 The functional bot code lives in the `post_summarizer_bot/` package:
 - `main.py`: Telegram wiring, handlers, state
+- `scraper.py`: Crawler chain — Defuddle (primary) → trafilatura (fallback)
 - `summarizer.py`: Gemini call + Langfuse tracing
 - `prompts.py`: Prompt template
 
@@ -44,7 +45,7 @@ The functional bot code lives in the `post_summarizer_bot/` package:
 1. The bot listens to Channel A via `python-telegram-bot` polling (`filters.UpdateType.CHANNEL_POST`)
 2. On each post, `extract_url()` finds the first URL in the message text/caption
 3. A placeholder message is immediately sent to Channel B ("⏳ Summarizing...")
-4. `scrape_content()` fetches and extracts article text using `trafilatura` (`favor_recall=True` for broader coverage)
+4. `scraper.scrape_content()` attempts crawlers in order: first Defuddle (`defuddle.md` API, returns Markdown), then trafilatura (`favor_recall=True`). Returns the first successful result or `None`.
 5. `summarizer.summarize()` sends up to 30,000 chars to Gemini (`gemini-3-flash-preview`) using the prompt template in `prompts.py`; wraps the call in a Langfuse generation span and returns `(summary, error, trace_id)`
 6. The placeholder is edited in-place: success → HTML summary with 👍/👎 feedback buttons; failure → error message with 🔄 Retry button
 
