@@ -1,4 +1,5 @@
 python-telegram-bot
+httpx
 trafilatura
 lxml_html_clean
 google-genai
